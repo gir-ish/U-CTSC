@@ -1,0 +1,16 @@
+[project]
+name = "longkid"
+version = "0.1.0"
+description = "LongKID: long-horizon child-AI companion simulation for U-CTSC"
+requires-python = ">=3.10"
+dependencies = ["anthropic>=2.8", "openai>=1.40", "pydantic>=2", "pyyaml"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.setuptools]
+packages = ["longkid"]

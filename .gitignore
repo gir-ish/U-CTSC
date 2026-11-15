@@ -1,0 +1,9 @@
+.venv/
+runs/
+__pycache__/
+*.tmp
+.conda-vllm/
+logs/
+longkid.egg-info/
+project-team2.pdf
+review/
