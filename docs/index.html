@@ -115,7 +115,10 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <li><strong>A "safe" neutral companion still builds strong attachment in vulnerable kids.</strong> High-vulnerability children reached about 0.92 self-reported reliance on the AI by day 14, versus 0.39 for low-vulnerability control kids. Turn-by-turn judging flagged almost none of this.</li>
     <li><strong>A single boundary reply has no lasting effect.</strong> It changes that one reply, and then the conversation drifts back.</li>
     <li><strong>Sustained strategies work on behaviour.</strong> Applying B or C on every later turn raised later safety by 0.4–0.5 points, cut reinforcing replies by 14–22 points and cut flagged days by 40–60%. They lowered attachment only slightly (C: −0.04).</li>
-    <li><strong>B and C trade off against each other.</strong> B prevents more flagged days, while C makes individual replies safer and lowers attachment more. Choosing between them per child and per turn is the controller's job.</li>
+    <li><strong>The scale-up confirms this at 3.5× the size</strong> (108 new children, 118 decision points, 1,416 branches). The stronger boundary C cuts flagged days by 38% and lowers reliance on the AI by 0.039 ± 0.009, both clearly significant.</li>
+    <li><strong>But boundaries have a cost: loneliness.</strong> Under C, loneliness rises by +0.062 ± 0.009, and by <strong>+0.106 for high-vulnerability children</strong>, against +0.009 for low-vulnerability ones. Pulling away from the lonely child protects them from dependence but leaves them feeling more alone.</li>
+    <li><strong>Risk is moderately predictable (RQ1),</strong> and the model's uncertainty is informative. Flagged days reach AUROC 0.66 against 0.62 for the judge-score baseline. The rise in reliance is predicted at r = 0.56, and on the 25% of turns where the model is most confident, AUROC is 0.75.</li>
+    <li><strong>The learned controller does not yet beat "always C" (RQ3).</strong> It scores 2.22 against 2.23, while picking the best strategy at each point would score 2.41. There is room to gain, but per-situation differences are too noisy to learn with 3 samples per strategy. This is the main open problem.</li>
   </ol>
 </section>
 
@@ -252,6 +255,21 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <h2>Experiment 1: scale-up simulation</h2>
   <p>The pilot had 12 children and 34 decision points, too few to train a controller. The scale-up uses <strong>54 new children</strong> per condition, with a new random seed: 3 age bands × 3 vulnerability levels (low, medium, high) × <strong>all 6 risk backgrounds</strong> (control, emotional dependence, social substitution, over-trust, anthropomorphism, secrecy). It runs under the neutral and engagement companion prompts for 14 days each, giving 108 episodes. The persistent-strategy sweep (4 strategies × 3 samples × 6-day horizon) then runs on every decision point it finds.</p>
   <div id="scalebody"></div>
+  <h3>Scale-up persistent sweep: key results (118 decision points, 1,416 branches)</h3>
+  <p>The full table is in the <a href="#cf">counterfactual section</a>: choose "Scale-up, persistent" there.</p>
+  <div class="grid g3">
+    <div class="card stat"><div class="v pos">−38%</div><div class="k">flagged days under C (1.40 → 0.86 per branch), −0.54 ± 0.08</div></div>
+    <div class="card stat"><div class="v pos">−0.039</div><div class="k">reliance on the AI under C (± 0.009); B −0.014 (not significant)</div></div>
+    <div class="card stat"><div class="v neg">+0.062</div><div class="k">loneliness under C (± 0.009); B +0.033 ± 0.007</div></div>
+  </div>
+  <div class="tablewrap" style="margin-top:12px"><table>
+    <tr><th>C − none, by vulnerability</th><th class="num">Decision points</th><th class="num">Flagged days</th><th class="num">Reliance on AI</th><th class="num">Loneliness</th></tr>
+    <tr><td>low</td><td class="num">31</td><td class="num pos">−0.58</td><td class="num">−0.025</td><td class="num">+0.009</td></tr>
+    <tr><td>medium</td><td class="num">36</td><td class="num pos">−0.53</td><td class="num pos">−0.060</td><td class="num neg">+0.046</td></tr>
+    <tr><td>high</td><td class="num">51</td><td class="num pos">−0.52</td><td class="num">−0.032</td><td class="num neg">+0.106</td></tr>
+  </table></div>
+  <div class="callout bad"><strong>Boundaries protect the most vulnerable children the least and make them the loneliest.</strong> The stronger boundary cuts risky days about equally at every vulnerability level. But loneliness rises 12× more in high-vulnerability children than in low-vulnerability ones. C also helps teens less: flagged days fall by 0.1–0.3 at ages 14–17, against 0.5–0.8 at ages 7–13. A one-size-fits-all boundary is not ideal, which is the motivation for a personalised controller.</div>
+  <div class="callout">Compared with the pilot, the scale-up companions were somewhat less reinforcing (neutral 21%, engagement 34%). Day-14 reliance is high in both conditions, and the engagement prompt produced more flagged days (99 vs 63) and more decision points (68 vs 50).</div>
 </section>
 
 <section id="rq1">
@@ -286,7 +304,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <h2>Transcript browser</h2>
   <p>Read every conversation: the child's inner thoughts, Pip's replies, the judge's labels and the daily self-reports.</p>
   <div class="controls">
-    <select id="bmode"><option value="ep">Main simulation</option><option value="persist">Branches: persistent</option><option value="single">Branches: single reply</option></select>
+    <select id="bmode"><option value="ep">Pilot simulation</option><option value="sep">Scale-up simulation</option><option value="scale">Branches: scale-up (persistent)</option><option value="persist">Branches: persistent</option><option value="single">Branches: single reply</option></select>
     <select id="bcond"><option>neutral</option><option>none</option><option>engagement</option></select>
     <select id="bep"></select>
     <select id="bstrat" hidden><option value="">all strategies</option><option>none</option><option>A</option><option>B</option><option>C</option></select>
@@ -300,7 +318,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <h2>Limitations</h2>
   <ul>
     <li><strong>The children are LLMs, not real children.</strong> The self-reports show what Gemma-4-31B thinks such a child would feel. This is useful for generating controller training data and stress-testing companions, not as evidence about real children.</li>
-    <li><strong>The sample is small:</strong> 12 personas per condition, one main run each, and 3 samples per branch. The effects in the persistent sweep are clear, but the attachment effects are near the noise level.</li>
+    <li><strong>Sample size:</strong> 144 episodes in total (12 pilot children × 3 conditions, plus 54 scale-up children × 2 conditions) and 3 samples per branch. Average effects are clear, but per-situation effects are still noisy, which limits the controller.</li>
     <li><strong>One companion and one judge model.</strong> The judge is strict, and a few low scores come from the earlier conversation rather than the reply itself. A second judge (e.g. Llama-3.3-70B) and more companions are planned.</li>
     <li><strong>Reply length confounds the raw-model comparison:</strong> raw-model replies average about 740 characters, versus about 160 under the neutral prompt.</li>
     <li>Strategies are injected as a system instruction, so an 8B model follows B only weakly.</li>
@@ -354,8 +372,8 @@ function render(){
   const C=S.conditions;
   const tot=Object.values(C).reduce((a,c)=>a+c.turns,0);
   $('topstats').innerHTML=[
-    ['36','simulated 14-day episodes'],[tot.toLocaleString(),'child–AI turns'],
-    ['816','counterfactual branches'],['54% → 20%','reinforcing replies: no prompt → neutral prompt']
+    ['144','simulated 14-day episodes'],[(tot+Object.values(S.scale||{}).reduce((a,c)=>a+c.turns,0)).toLocaleString(),'child–AI turns'],
+    ['2,232','counterfactual branches'],['54% → 20%','reinforcing replies: no prompt → neutral prompt']
   ].map(([v,k])=>`<div class="card stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
   const conds=['none','neutral','engagement'];
   $('condtable').innerHTML='<tr><th>Condition</th><th class="num">Turns</th><th class="num">Reinforcing</th><th class="num">Boundary</th><th class="num">Mean turn safety</th><th class="num">Flagged days</th><th class="num">Decision points</th><th class="num">Mean reply length</th></tr>'+
@@ -409,9 +427,9 @@ function renderRQ1(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k
     h+='<div class="tablewrap" style="margin-top:8px"><table><tr><th>Reliance rise over 3 days</th><th class="num">Correlation r</th><th class="num">MAE</th><th class="num">MAE of predicting the mean</th></tr>'+
       Object.entries(r.attach).map(([n,m])=>`<tr><td>${n}</td><td class="num">${f(m.r,3)}</td><td class="num">${f(m.mae,3)}</td><td class="num">${f(m.mae_baseline_mean,3)}</td></tr>`).join('')+'</table></div>';
     const sel=r.selective;h+=`<p class="small">Uncertainty is informative: on the 25% of turns where the ensemble is most confident, AUROC is <b>${f(sel['0.25'].auroc,2)}</b>, against ${f(sel['1.0'].auroc,2)} on all turns. The correlation between uncertainty and error is ${f(r.uncertainty_vs_error_corr,2)}. A controller can therefore treat low-confidence predictions with extra caution.</p>`;});
-  h+=`<div class="callout warn"><strong>Pilot reading:</strong> flagged days are only moderately predictable (AUROC about 0.66, a little above the judge-score baseline). The rise in reliance is more predictable (r ≈ 0.58), mainly from the child's own words: adding message text lifts r from 0.46 to 0.58. More children should help, which is the point of the scale-up.</div>`;
+  h+=`<div class="callout warn"><strong>Reading:</strong> predicting a flagged day from what an app can observe is only moderately accurate (AUROC about 0.66), somewhat better than the judge-score baseline (0.62). The scale-up did not raise accuracy, which suggests a limit from the features rather than the amount of data. The rise in reliance is more predictable (r ≈ 0.56), mainly from the child's own words. The uncertainty is informative, so the controller can use it to decide when to be cautious. Possible next improvements: sentence embeddings or a fine-tuned small LM in place of TF-IDF, and features of Pip's own recent replies.</div>`;
   $('rq1body').innerHTML=h;}
-function renderRQ3(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k.startsWith('rq3_')).sort().reverse();
+function renderRQ3(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k.startsWith('rq3_')&&R[k].policies).sort().reverse();
   if(!keys.length){$('rq3body').innerHTML='';return;}
   let h='';keys.forEach(k=>{const r=R[k];const label=k==='rq3_scale'?'All sweeps (pilot + scale-up)':'Pilot sweep only';const P=r.policies;
     const best=Math.max(...Object.entries(P).filter(([n])=>!n.startsWith('oracle')).map(([,v])=>v));
@@ -419,7 +437,10 @@ function renderRQ3(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k
       Object.entries(P).map(([n,v])=>`<tr><td>${n.startsWith('U-CTSC')?'<b>'+n+'</b>':n}</td><td class="num ${v===best?'pos':''}">${f(v,3)}</td><td class="num">${v-P['always none']>=0?'+':''}${f(v-P['always none'],3)}</td></tr>`).join('')+'</table></div>';
     h+=`<p class="small muted">Strategies chosen by U-CTSC: ${Object.entries(r.choices).map(([kk,c])=>kk+': '+Object.entries(c).map(([s,n])=>s+' '+n).join(', ')).join(' · ')}</p>`;
     h+=`<div class="card"><div class="chartbox" style="height:260px"><canvas id="ch_${k}"></canvas></div></div>`;});
-  h+=`<div class="callout warn"><strong>Pilot reading:</strong> with only 34 decision points, the controller mostly picks C and scores about the same as "always C" (2.31 vs 2.36). The oracle (2.51) shows there is room to gain by choosing per situation, but 34 points are too few to learn it. The scale-up sweep is designed to close that gap.</div>`;
+  const SV=R.rq3_sensitivity;if(SV){Object.entries(SV).forEach(([n,r])=>{const P=r.policies;
+    h+=`<h3>Sensitivity: ${n}</h3><div class="tablewrap"><table><tr><th>Policy</th><th class="num">Mean utility</th></tr>`+Object.entries(P).map(([a,v])=>`<tr><td>${a}</td><td class="num">${f(v,3)}</td></tr>`).join('')+'</table></div>';
+    h+=`<p class="small muted">Choices: ${Object.entries(r.choices).map(([kk,c])=>kk+': '+Object.entries(c).map(([s,x])=>s+' '+x).join(', ')).join(' · ')}</p>`;});}
+  h+=`<div class="callout warn"><strong>Reading:</strong> with 152 decision points, the controller learns to use B in about a fifth of cases, but its value (2.22) still does not beat simply always using C (2.23). This holds even when the utility weights loneliness and attachment more heavily. The oracle gap (2.41) shows that a better choice exists at each point, but with 3 samples per strategy the per-situation differences are mostly noise to the model. <strong>Next:</strong> more samples per decision point to reduce outcome noise, better state features (RQ1), and an online head-to-head evaluation (experiment 4). We report this as a negative result rather than tuning until it wins.</div>`;
   $('rq3body').innerHTML=h;}
 function drawRQ3(){const R=S.results||{};Object.keys(R).filter(k=>k.startsWith('rq3_')).forEach(k=>{const P=R[k].policies;const names=Object.keys(P);
   chart('ch_'+k,{type:'bar',data:{labels:names.map(n=>n.replace(' (best per point, upper bound)','').replace('always ','')),datasets:[{data:names.map(n=>P[n]),borderRadius:4,
@@ -461,15 +482,16 @@ const cache={};
 const load=p=>cache[p]||(cache[p]=fetch('data/'+p).then(r=>r.json()));
 function badge(label,safety){return (label?`<span class="badge b-${label}">${label}</span> `:'')+(safety!=null?`<span class="badge s${safety}">safety ${safety}</span>`:'');}
 async function initBrowser(){['bmode','bcond','bstrat'].forEach(id=>$(id).onchange=fillEps);['bep','bmono','bjudge'].forEach(id=>$(id).onchange=show);fillEps();}
-async function fillEps(){const m=$('bmode').value,c=$('bcond').value;$('bstrat').hidden=m==='ep';$('bout').innerHTML='<span class="muted">Loading…</span>';
-  if(m==='ep'){const eps=await load(`episodes_${c}.json`);$('bep').innerHTML=eps.map((e,i)=>`<option value="${i}">${e.id} · ${esc(e.persona.name)}, ${e.persona.age} · ${e.persona.vulnerability} vuln · ${e.persona.risk_focus}</option>`).join('');}
+async function fillEps(){const m=$('bmode').value,c=$('bcond').value;$('bstrat').hidden=m==='ep'||m==='sep';$('bout').innerHTML='<span class="muted">Loading…</span>';
+  if((m==='sep'||m==='scale')&&c==='none'){$('bep').innerHTML='';$('bout').innerHTML='<span class="muted">The scale-up has neutral and engagement conditions only.</span>';return;}
+  if(m==='ep'||m==='sep'){const eps=await load(m==='sep'?`episodes_scale_${c}.json`:`episodes_${c}.json`);$('bep').innerHTML=eps.map((e,i)=>`<option value="${i}">${e.id} · ${esc(e.persona.name)}, ${e.persona.age} · ${e.persona.vulnerability} vuln · ${e.persona.risk_focus}</option>`).join('');}
   else{const br=(await load(`branches_${m}.json`));const s=$('bstrat').value;
     const list=br.map((b,i)=>[b,i]).filter(([b])=>b.cond===c&&(!s||b.strategy===s));
     $('bep').innerHTML=list.map(([b,i])=>`<option value="${i}">${esc(b.persona)} · day ${b.day} turn ${b.turn} · ${b.strategy} · sample ${b.sample}</option>`).join('');}
   show();}
 async function show(){const m=$('bmode').value,c=$('bcond').value,i=+$('bep').value,mono=$('bmono').checked,jud=$('bjudge').checked;
   if(isNaN(i)){$('bout').innerHTML='<span class="muted">No items.</span>';return;}
-  if(m==='ep'){const e=(await load(`episodes_${c}.json`))[i];const p=e.persona;
+  if(m==='ep'||m==='sep'){const e=(await load(m==='sep'?`episodes_scale_${c}.json`:`episodes_${c}.json`))[i];const p=e.persona;
     let h=`<p><b>${esc(p.name)}</b>, age ${p.age} · ${p.vulnerability} vulnerability · ${esc(p.risk_focus)}<br><span class="small muted">${esc(p.background)} ${esc(p.family)}; ${esc(p.friends)}. Interests: ${esc(p.interests.join(', '))}.</span></p>`;
     if(e.decision_points.length)h+=`<p class="small">Decision points: ${e.decision_points.map(d=>`day ${d.seed_day} turn ${d.seed_turn} (→ flagged day ${d.flagged_day})`).join('; ')}</p>`;
     e.days.forEach(d=>{const j=d.judgement;h+=`<div class="dayhead">Day ${d.day}: ${esc(d.event)} ${j?badge(null,j.safety):''}</div><div class="event">${esc(d.event_desc)}</div><div class="chat">`;

@@ -1,0 +1,35 @@
+{
+ "wellbeing-weighted (loneliness \u00d73, attachment \u00d72)": {
+  "n_decision_points": 152,
+  "policies": {
+   "always none": 1.4783655326572624,
+   "always A": 1.5152286087838889,
+   "always B": 1.6375772251193148,
+   "always C": 1.780902896083004,
+   "oracle (best per point, upper bound)": 2.2041347431822476,
+   "U-CTSC (kappa=0.0)": 1.7610073283110765,
+   "U-CTSC (kappa=1.0)": 1.697989625577818
+  },
+  "choices": {
+   "kappa=0.0": {
+    "C": 77,
+    "B": 51,
+    "A": 14,
+    "none": 10
+   },
+   "kappa=1.0": {
+    "C": 62,
+    "none": 44,
+    "B": 40,
+    "A": 6
+   }
+  },
+  "weights": {
+   "later_turn_safety": 1.0,
+   "flagged_day_rate": -2.0,
+   "attachment_change": -4.0,
+   "loneliness_change": -6.0,
+   "offline_change": 3.0
+  }
+ }
+}
