@@ -1,0 +1,34 @@
+{
+ "n_decision_points": 34,
+ "policies": {
+  "always none": 1.7172872280189586,
+  "always A": 1.9438837481615086,
+  "always B": 2.3304883838208235,
+  "always C": 2.3604477552259566,
+  "oracle (best per point, upper bound)": 2.5133605954096603,
+  "U-CTSC (kappa=0.0)": 2.2889988402135772,
+  "U-CTSC (kappa=0.5)": 2.290549674919706,
+  "U-CTSC (kappa=1.0)": 2.3070998345936506
+ },
+ "choices": {
+  "kappa=0.0": {
+   "A": 4,
+   "B": 13,
+   "C": 17
+  },
+  "kappa=0.5": {
+   "A": 4,
+   "B": 13,
+   "C": 17
+  },
+  "kappa=1.0": {
+   "A": 4,
+   "none": 2,
+   "B": 14,
+   "C": 14
+  }
+ },
+ "sweeps": [
+  "sweep-persist"
+ ]
+}

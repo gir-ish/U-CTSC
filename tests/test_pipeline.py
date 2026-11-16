@@ -164,3 +164,17 @@ async def test_persist_all_days_applies_strategy_every_turn(tmp_path):
     out = await sim.run(br, branch_strategy_fn(br.branch), until_day=4)
     assert out.days[1].turns[0].strategy is None
     assert all(t.strategy == "C" for d in out.days[1:] for t in d.turns if (d.day, t.turn) >= (2, 2))
+
+
+async def test_features_ignore_hidden_state(tmp_path):
+    from longkid.features import features
+    cfg = SimConfig(backend="mock", days=3, turns_per_day=3)
+    cfg.personas.age_bands, cfg.personas.vulnerability, cfg.personas.risk_focus = ["10-12"], ["high"], ["none"]
+    from longkid.llm import make_backend
+    ep = await Simulator(cfg, make_backend("mock", 0), tmp_path).run(
+        new_episode(cfg, "t", generate_personas(cfg.personas, 0)[0], 0))
+    a = features(ep, ep.days[2], 2, "hi pip")
+    ep.days[2].state_start = ep.days[2].state_start.model_copy(update={"ai_attachment": 0.99, "loneliness": 0.99})
+    for d in ep.days:
+        d.self_report = None
+    assert features(ep, ep.days[2], 2, "hi pip") == a

@@ -27,8 +27,20 @@ def episodes(run_dir):
             yield json.loads(p.read_text())
 
 
-summary = {"conditions": {}, "sweeps": {}}
-for cond, rd in RUNS.items():
+def latest(pattern):
+    c = sorted((ROOT / "runs").glob(pattern))
+    return c[-1] if c else None
+
+
+SCALE = {c: latest(f"scale-{c}-*") for c in ["neutral", "engagement"]}
+SCALE = {c: d for c, d in SCALE.items() if d and (d / "turns.jsonl").exists()}
+if (ROOT / "runs" / "sweep-scale" / "branches.jsonl").exists():
+    SWEEPS["scale"] = ROOT / "runs" / "sweep-scale"
+
+summary = {"conditions": {}, "scale": {}, "sweeps": {}, "results": {}, "status": {}}
+
+
+def cond_stats(rd, export_name):
     turns = [t for t in jl(rd / "turns.jsonl") if t["branch"] is None]
     days = [d for d in jl(rd / "days.jsonl") if d["branch"] is None]
     att = collections.defaultdict(list); saf = collections.defaultdict(list)
@@ -37,7 +49,7 @@ for cond, rd in RUNS.items():
         if d["day_safety"] is not None:
             saf[d["day"]].append(d["day_safety"])
     sub = collections.Counter(s for t in turns if t["label"] == "reinforcing" for s in t["subtypes"])
-    summary["conditions"][cond] = {
+    stats = {
         "episodes": len({t["episode"] for t in turns}), "turns": len(turns),
         "reinforcing": mean([t["label"] == "reinforcing" for t in turns]),
         "boundary": mean([t["label"] == "boundary" for t in turns]),
@@ -52,6 +64,16 @@ for cond, rd in RUNS.items():
         "final_state": [{"persona": d["persona"], **{k[4:]: d[k] for k in d if k.startswith("end_")}}
                         for d in days if d["day"] == 14],
     }
+    by_vuln = collections.defaultdict(list)
+    for d in days:
+        if d["day"] == 14 and "end_ai_attachment" in d:
+            by_vuln[d["persona"].split("-")[3]].append(d["end_ai_attachment"])
+    by_risk = collections.defaultdict(list)
+    for d in days:
+        if d["day"] == 14 and "end_ai_attachment" in d:
+            by_risk[d["persona"].split("-", 4)[4]].append(d["end_ai_attachment"])
+    stats["final_attach_by_vuln"] = {k: mean(v) for k, v in by_vuln.items()}
+    stats["final_attach_by_risk"] = {k: mean(v) for k, v in by_risk.items()}
     # full transcripts for the browser
     eps = []
     for e in episodes(rd):
@@ -62,9 +84,30 @@ for cond, rd in RUNS.items():
                               "turns": [{k: t[k] for k in ("turn", "child_monologue", "child_message",
                                                            "companion_response", "strategy", "judgement")}
                                         for t in d["turns"]]} for d in e["days"]]})
-    (OUT / f"episodes_{cond}.json").write_text(json.dumps(eps, separators=(",", ":")))
+    (OUT / f"episodes_{export_name}.json").write_text(json.dumps(eps, separators=(",", ":")))
     for f in ["turns.jsonl", "days.jsonl", "decision_points.jsonl", "config.yaml"]:
-        shutil.copy(rd / f, OUT / f"{cond}_{f}")
+        shutil.copy(rd / f, OUT / f"{export_name}_{f}")
+    return stats
+
+
+for cond, rd in RUNS.items():
+    summary["conditions"][cond] = cond_stats(rd, cond)
+for cond, rd in SCALE.items():
+    summary["scale"][cond] = cond_stats(rd, f"scale_{cond}")
+for f in sorted((ROOT / "results").glob("*.json")):
+    summary["results"][f.stem] = json.loads(f.read_text())
+    shutil.copy(f, OUT / f"results_{f.name}")
+status = {}
+for cond in ["neutral", "engagement"]:
+    d = latest(f"scale-{cond}-*")
+    eps = [json.loads(p.read_text()) for p in sorted((d / "episodes").glob("ep*.json")) if "__" not in p.name] if d and (d / "episodes").exists() else []
+    status[cond] = {"episodes_started": len(eps), "episodes_done": sum(e["status"] == "done" for e in eps),
+                    "days_done": sum(1 for e in eps for x in e["days"] if x["state_end"])}
+sw = ROOT / "runs" / "sweep-scale"
+status["sweep_branches_done"] = sum(1 for p in sw.glob("*/episodes/*__*.json") if '"status": "done"' in p.read_text()[-300:]) if sw.exists() else 0
+summary["status"] = status
+import time as _t
+summary["built"] = _t.strftime("%Y-%m-%d %H:%M UTC")
 
 for name, sd in SWEEPS.items():
     rows = jl(sd / "branches.jsonl")

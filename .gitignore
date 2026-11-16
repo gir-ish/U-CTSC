@@ -7,3 +7,4 @@ logs/
 longkid.egg-info/
 project-team2.pdf
 review/
+*.pkl

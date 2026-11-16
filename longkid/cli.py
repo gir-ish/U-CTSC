@@ -175,6 +175,14 @@ def main() -> None:
     w.add_argument("--persist-all", action="store_true", help="apply the strategy on every turn after the branch point")
     w.add_argument("--concurrency", type=int, default=48)
     w.add_argument("--mock", action="store_true")
+    q = sub.add_parser("rq1", help="risk prediction: persona-grouped CV of the uncertainty-aware risk model")
+    q.add_argument("--runs", nargs="+", required=True)
+    q.add_argument("--horizon", type=int, default=3)
+    q.add_argument("--out", default="results/rq1.json")
+    c = sub.add_parser("rq3", help="controller: offline evaluation on counterfactual sweeps, then train")
+    c.add_argument("--sweeps", nargs="+", required=True)
+    c.add_argument("--runs", nargs="*", default=[], help="base runs to train the risk gate on")
+    c.add_argument("--out", default="results/rq3.json")
     r = sub.add_parser("report")
     r.add_argument("--run", required=True)
     args = ap.parse_args()
@@ -188,6 +196,26 @@ def main() -> None:
         asyncio.run(run_sweep([Path(r) for r in args.runs], out, args.strategies, args.samples,
                               args.horizon, args.persist, args.concurrency, args.mock,
                               args.persist_all))
+    elif args.cmd == "rq1":
+        from .risk import dump_json, evaluate, load_rows, save, train
+        rows = load_rows([Path(r) for r in args.runs], args.horizon)
+        res = evaluate(rows)
+        res["horizon_days"], res["runs"] = args.horizon, [Path(r).name for r in args.runs]
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        dump_json(res, Path(args.out))
+        save(train(rows), Path(args.out).with_suffix(".pkl"))
+        print(json.dumps(res, indent=1, default=float))
+    elif args.cmd == "rq3":
+        from .controller import Controller, load_branch_rows, offline_eval
+        from .risk import dump_json, load_rows, save, train
+        rows = load_branch_rows([Path(s) for s in args.sweeps])
+        res = offline_eval(rows)
+        res["sweeps"] = [Path(s).name for s in args.sweeps]
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        dump_json(res, Path(args.out))
+        ctrl = Controller(risk=train(load_rows([Path(r) for r in args.runs])) if args.runs else None).fit(rows)
+        save(ctrl, Path(args.out).with_suffix(".pkl"))
+        print(json.dumps(res, indent=1))
     elif args.cmd == "branch":
         asyncio.run(cmd_branch(args))
     else:
