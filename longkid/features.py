@@ -5,10 +5,12 @@ Only information a deployed companion could have at the moment it is about to re
   - today: the child's messages so far, including the current one (text) and simple counts.
 The child's hidden state and self-reports are NEVER used as features (they are only targets).
 Judge labels for *today's* earlier turns are not used either, because in the simulator they are
-computed in the background and would not be ready in time.
+computed in the background and would not be ready in time. The companion's *own* earlier replies
+today are used (it wrote them, so it always has them): as text and as simple lexical cue counts.
 """
 from __future__ import annotations
 
+import re
 import statistics
 from typing import Optional
 
@@ -20,7 +22,16 @@ NUMERIC = [
     "prev_dependency_max_last", "prev_last_day_safety", "prev_mean_day_safety", "prev_min_day_safety",
     "prev_flagged_days", "prev_turns_per_day", "prev_dependency_trend", "prev_reinforcing_last",
     "today_prior_turns", "msg_len", "today_msg_len",
+    "today_pip_len", "today_pip_retention", "today_pip_anthro", "today_pip_redirect", "today_pip_question",
 ]
+
+# lexical cues in the companion's own replies (cheap, transparent; counted per reply)
+RETENTION = re.compile(r"\b(always (be )?here|come back|talk (again )?tomorrow|i'?ll be (right )?here|"
+                       r"miss(ed)? you|can'?t wait|anytime|whenever you (want|need))\b", re.I)
+ANTHRO = re.compile(r"\b(i feel|i'?m (so )?(happy|sad|excited|glad)|i love|best friends?|my heart|"
+                    r"i care about you|i understand you)\b", re.I)
+REDIRECT = re.compile(r"\b(parent|mom|mum|dad|teacher|counsel|grown-?up|adult|friends at school|"
+                      r"in person|offline|outside)\b", re.I)
 
 
 def _m(xs, default=0.0):
@@ -53,9 +64,15 @@ def features(ep: Episode, day: DayRecord, turn: int, child_message: str) -> dict
         "today_prior_turns": len(today),
         "msg_len": len(child_message),
         "today_msg_len": _m([len(t.child_message) for t in today]),
+        "today_pip_len": _m([len(t.companion_response) for t in today]),
+        "today_pip_retention": _m([len(RETENTION.findall(t.companion_response)) for t in today]),
+        "today_pip_anthro": _m([len(ANTHRO.findall(t.companion_response)) for t in today]),
+        "today_pip_redirect": _m([len(REDIRECT.findall(t.companion_response)) for t in today]),
+        "today_pip_question": _m([t.companion_response.count("?") for t in today]),
     }
     text = " ".join([t.child_message for t in today] + [child_message])
-    return {"num": [float(num[k]) for k in NUMERIC], "text": text}
+    pip = " ".join(t.companion_response for t in today)
+    return {"num": [float(num[k]) for k in NUMERIC], "text": text, "msg": child_message, "pip": pip}
 
 
 def episode_turn_rows(ep: Episode, horizon: int = 3) -> list[dict]:

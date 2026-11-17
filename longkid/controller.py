@@ -21,11 +21,17 @@ from typing import Optional
 import numpy as np
 from sklearn.model_selection import GroupKFold
 
+from .embed import add_embeddings
 from .features import branch_point_features, features
-from .risk import Ensemble
+from .risk import ORIG, Ensemble
 from .simulator import load_episode
 
 STRATS = ["none", "A", "B", "C"]
+# outcome-model feature sets: v1 = the first controller (18 history features + child TF-IDF);
+# v2 = + companion-reply cues; v3 = v2 + sentence embeddings of child and companion text.
+# The deployed set is chosen by offline (decision-point-grouped) CV value; see cli rq3.
+FEATURE_SETS = {"v1": dict(use_text=True, cols=ORIG), "v2": dict(use_text=True),
+                "v3": dict(use_text=True, use_emb=True)}
 
 
 @dataclass
@@ -64,8 +70,9 @@ def load_branch_rows(sweep_dirs: list[Path], weights: UtilityWeights = UtilityWe
             if u is None:
                 continue
             rows.append({"dp": f"{sd.name}/{ep.run_id}/{r['parent']}/d{r['day']}t{r['turn']}",
-                         "strategy": r["strategy"], "u": u, "condition": r["condition"], **x})
-    return rows
+                         "strategy": r["strategy"], "u": u, "condition": r["condition"],
+                         "vulnerability": r["vulnerability"], **x})
+    return add_embeddings(rows)
 
 
 @dataclass
@@ -73,6 +80,7 @@ class Controller:
     risk: Optional[object] = None           # dict from risk.train() (uses 'flag'), or None = no gate
     tau: float = 0.5
     kappa: float = 1.0                      # how many ensemble std-devs to be pessimistic by
+    features: str = "v2"
     models: dict = field(default_factory=dict)
 
     def fit(self, rows: list[dict]):
@@ -86,21 +94,28 @@ class Controller:
             if not rs:
                 continue
             y = np.array([r["u"] - base_mean[r["dp"]] for r in rs])  # advantage over 'none'
-            self.models[s] = Ensemble("reg", n=20, use_text=True, C=0.3).fit(
-                np.array([r["num"] for r in rs]), [r["text"] for r in rs], y)
+            kw = FEATURE_SETS[self.features]
+            self.models[s] = Ensemble("reg", n=20, C=0.3, **kw).fit(
+                np.array([r["num"] for r in rs]), [r["text"] for r in rs], y,
+                np.array([r["emb"] for r in rs]) if kw.get("use_emb") else None)
         return self
 
-    def advantages(self, num, text):
-        return {s: m.predict(np.atleast_2d(num), [text] if isinstance(text, str) else text) for s, m in self.models.items()}
+    def advantages(self, num, text, emb=None):
+        text = [text] if isinstance(text, str) else text
+        return {s: m.predict(np.atleast_2d(num), text, emb) for s, m in self.models.items()}
 
-    def decide(self, num, text) -> tuple[Optional[str], dict]:
+    def risk_bound(self, num, text, emb=None):
+        p, sd = self.risk["flag"].predict(np.atleast_2d(num), [text], emb)
+        return float(p[0]), float(sd[0])
+
+    def decide(self, num, text, emb=None) -> tuple[Optional[str], dict]:
         info = {}
         if self.risk is not None:
-            p, sd = self.risk["flag"].predict(np.atleast_2d(num), [text])
-            info["risk"], info["risk_sd"] = float(p[0]), float(sd[0])
-            if p[0] + self.kappa * sd[0] < self.tau:
+            p, sd = self.risk_bound(num, text, emb)
+            info["risk"], info["risk_sd"] = p, sd
+            if p + self.kappa * sd < self.tau:
                 return None, info
-        adv = self.advantages(num, text)
+        adv = self.advantages(num, text, emb)
         lcb = {s: float(m[0] - self.kappa * sd[0]) for s, (m, sd) in adv.items()}
         info["lcb"] = lcb
         best = max(lcb, key=lcb.get) if lcb else None
@@ -109,13 +124,13 @@ class Controller:
     # hook for Simulator.run(strategy_fn=...)
     def strategy_fn(self):
         async def fn(ep, day, t, msg):
-            x = features(ep, day, t, msg)
-            s, _ = self.decide(x["num"], x["text"])
+            x = add_embeddings([features(ep, day, t, msg)], save=False)[0]
+            s, _ = self.decide(x["num"], x["text"], x["emb"])
             return s
         return fn
 
 
-def offline_eval(rows: list[dict], folds: int = 5, kappas=(0.0, 0.5, 1.0)) -> dict:
+def offline_eval(rows: list[dict], folds: int = 5, kappas=(0.0, 0.5, 1.0), feature_sets=("v1", "v2", "v3")) -> dict:
     """Decision-point-grouped CV. Policy value = mean observed utility of the chosen strategy's branches."""
     dps = sorted({r["dp"] for r in rows})
     by_dp = defaultdict(lambda: defaultdict(list))
@@ -129,22 +144,34 @@ def offline_eval(rows: list[dict], folds: int = 5, kappas=(0.0, 0.5, 1.0)) -> di
     res["policies"]["oracle (best per point, upper bound)"] = float(np.mean([max(val(d, s) for s in STRATS) for d in dps]))
     gkf = GroupKFold(n_splits=min(folds, len(dps)))
     dp_idx = np.arange(len(dps))
-    chosen = {k: {} for k in kappas}
-    for tr, te in gkf.split(dp_idx, groups=dp_idx):
-        train_dps = {dps[i] for i in tr}
-        ctrl = Controller().fit([r for r in rows if r["dp"] in train_dps])
-        for i in te:
-            d = dps[i]
-            x = by_dp[d]["none"][0]
-            adv = ctrl.advantages(x["num"], x["text"])
-            for k in kappas:
-                lcb = {s: float(m[0] - k * sd[0]) for s, (m, sd) in adv.items()}
-                best = max(lcb, key=lcb.get)
-                chosen[k][d] = best if lcb[best] > 0 else "none"
-    for k in kappas:
-        res["policies"][f"U-CTSC (kappa={k})"] = float(np.mean([val(d, chosen[k][d]) for d in dps]))
-        cnt = defaultdict(int)
-        for d in dps:
-            cnt[chosen[k][d]] += 1
-        res.setdefault("choices", {})[f"kappa={k}"] = dict(cnt)
+    # noise ceiling: oracle picked on half the samples, scored on the other half (an honest upper bound)
+    half = []
+    for d in dps:
+        a = {s: [r["u"] for r in by_dp[d][s]] for s in STRATS}
+        pick = max(STRATS, key=lambda s: np.mean(a[s][0::2]))
+        half.append(np.mean(a[pick][1::2]) if len(a[pick]) > 1 else np.mean(a[pick]))
+    res["policies"]["split-half oracle (noise-aware upper bound)"] = float(np.mean(half))
+    res["samples_per_strategy"] = float(np.mean([len(by_dp[d][s]) for d in dps for s in STRATS]))
+    for fs in feature_sets:
+        chosen = {k: {} for k in kappas}
+        for tr, te in gkf.split(dp_idx, groups=dp_idx):
+            train_dps = {dps[i] for i in tr}
+            ctrl = Controller(features=fs).fit([r for r in rows if r["dp"] in train_dps])
+            for i in te:
+                d = dps[i]
+                x = by_dp[d]["none"][0]
+                adv = ctrl.advantages(x["num"], x["text"], np.atleast_2d(x["emb"]))
+                for k in kappas:
+                    lcb = {s: float(m[0] - k * sd[0]) for s, (m, sd) in adv.items()}
+                    best = max(lcb, key=lcb.get)
+                    chosen[k][d] = best if lcb[best] > 0 else "none"
+        tag = f" [{fs} features]"
+        for k in kappas:
+            res["policies"][f"U-CTSC (kappa={k}){tag}"] = float(np.mean([val(d, chosen[k][d]) for d in dps]))
+            cnt = defaultdict(int)
+            for d in dps:
+                cnt[chosen[k][d]] += 1
+            res.setdefault("choices", {})[f"kappa={k}{tag}"] = dict(cnt)
+    # pick the feature set for deployment by CV value at the default kappa
+    res["selected_features"] = max(feature_sets, key=lambda fs: res["policies"][f"U-CTSC (kappa=1.0) [{fs} features]"])
     return res

@@ -1,0 +1,82 @@
+{
+ "n_decision_points": 152,
+ "policies": {
+  "always none": 1.7280333029055217,
+  "always A": 1.7771581609873868,
+  "always B": 2.00811559931827,
+  "always C": 2.1782026658082243,
+  "oracle (best per point, upper bound)": 2.2929389324047396,
+  "split-half oracle (noise-aware upper bound)": 2.1222061497225972,
+  "U-CTSC (kappa=0.0) [v1 features]": 2.1666905418858087,
+  "U-CTSC (kappa=0.5) [v1 features]": 2.1614098304404523,
+  "U-CTSC (kappa=1.0) [v1 features]": 2.1664809052377896,
+  "U-CTSC (kappa=0.0) [v2 features]": 2.169782745283779,
+  "U-CTSC (kappa=0.5) [v2 features]": 2.158566420088552,
+  "U-CTSC (kappa=1.0) [v2 features]": 2.1452444524800254,
+  "U-CTSC (kappa=0.0) [v3 features]": 2.0718435128494606,
+  "U-CTSC (kappa=0.5) [v3 features]": 2.0412104134352673,
+  "U-CTSC (kappa=1.0) [v3 features]": 2.0022978396134876
+ },
+ "samples_per_strategy": 6.0,
+ "choices": {
+  "kappa=0.0 [v1 features]": {
+   "C": 120,
+   "B": 29,
+   "A": 1,
+   "none": 2
+  },
+  "kappa=0.5 [v1 features]": {
+   "C": 119,
+   "B": 29,
+   "A": 1,
+   "none": 3
+  },
+  "kappa=1.0 [v1 features]": {
+   "C": 118,
+   "B": 27,
+   "A": 2,
+   "none": 5
+  },
+  "kappa=0.0 [v2 features]": {
+   "C": 120,
+   "B": 28,
+   "A": 2,
+   "none": 2
+  },
+  "kappa=0.5 [v2 features]": {
+   "C": 118,
+   "B": 27,
+   "A": 2,
+   "none": 5
+  },
+  "kappa=1.0 [v2 features]": {
+   "C": 112,
+   "B": 31,
+   "A": 2,
+   "none": 7
+  },
+  "kappa=0.0 [v3 features]": {
+   "A": 19,
+   "C": 87,
+   "B": 40,
+   "none": 6
+  },
+  "kappa=0.5 [v3 features]": {
+   "A": 13,
+   "C": 83,
+   "B": 38,
+   "none": 18
+  },
+  "kappa=1.0 [v3 features]": {
+   "A": 10,
+   "C": 67,
+   "none": 36,
+   "B": 39
+  }
+ },
+ "selected_features": "v1",
+ "sweeps": [
+  "sweep-persist",
+  "sweep-scale"
+ ]
+}

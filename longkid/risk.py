@@ -18,29 +18,44 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 from sklearn.model_selection import GroupKFold
 from sklearn.preprocessing import StandardScaler
 
+from .embed import add_embeddings
 from .features import NUMERIC, episode_turn_rows
 from .simulator import load_episode
 
 
 class Ensemble:
-    """Bootstrap ensemble; kind = 'clf' (probability) or 'reg'. use_text toggles the TF-IDF block."""
+    """Bootstrap ensemble; kind = 'clf' (probability) or 'reg'.
 
-    def __init__(self, kind: str = "clf", n: int = 20, use_text: bool = True, seed: int = 0, C: float = 0.5):
+    Blocks: scaled numeric features (optionally a column subset `cols`), TF-IDF of today's child
+    text (`use_text`), and sentence embeddings of child + companion text (`use_emb`).
+    """
+
+    def __init__(self, kind: str = "clf", n: int = 20, use_text: bool = True, seed: int = 0, C: float = 0.5,
+                 use_emb: bool = False, cols=None):
         self.kind, self.n, self.use_text, self.seed, self.C = kind, n, use_text, seed, C
+        self.use_emb, self.cols = use_emb, cols
 
-    def _X(self, num, text, fit=False):
+    def _X(self, num, text, emb=None, fit=False):
+        num = np.asarray(num)
+        if self.cols is not None:
+            num = num[:, self.cols]
         if fit:
             self.scaler = StandardScaler().fit(num)
             if self.use_text:
                 self.tfidf = TfidfVectorizer(ngram_range=(1, 2), min_df=2, max_features=5000, sublinear_tf=True).fit(text)
-        X = sparse.csr_matrix(self.scaler.transform(num))
+            if self.use_emb:
+                self.escaler = StandardScaler().fit(emb)
+        parts = [sparse.csr_matrix(self.scaler.transform(num))]
         if self.use_text:
-            X = sparse.hstack([X, self.tfidf.transform(text)]).tocsr()
-        return X
+            parts.append(self.tfidf.transform(text))
+        if self.use_emb:
+            # down-weight the 1152 dense dims so they do not swamp the numeric block
+            parts.append(sparse.csr_matrix(self.escaler.transform(np.asarray(emb)) / np.sqrt(np.asarray(emb).shape[1] / 64)))
+        return sparse.hstack(parts).tocsr()
 
-    def fit(self, num, text, y):
-        num, y = np.asarray(num), np.asarray(y)
-        X = self._X(num, text, fit=True)
+    def fit(self, num, text, y, emb=None):
+        y = np.asarray(y)
+        X = self._X(num, text, emb, fit=True)
         rng = np.random.default_rng(self.seed)
         self.models = []
         for _ in range(self.n):
@@ -52,13 +67,13 @@ class Ensemble:
             self.models.append(m.fit(X[idx], y[idx]))
         return self
 
-    def predict(self, num, text):
-        X = self._X(np.asarray(num), text)
+    def predict(self, num, text, emb=None):
+        X = self._X(np.atleast_2d(num), text, None if emb is None else np.atleast_2d(emb))
         P = np.stack([m.predict_proba(X)[:, 1] if self.kind == "clf" else m.predict(X) for m in self.models])
         return P.mean(0), P.std(0)
 
 
-def load_rows(run_dirs: list[Path], horizon: int = 3) -> list[dict]:
+def load_rows(run_dirs: list[Path], horizon: int = 3, emb: bool = True) -> list[dict]:
     rows = []
     for rd in run_dirs:
         for p in sorted((rd / "episodes").glob("ep*.json")):
@@ -67,7 +82,7 @@ def load_rows(run_dirs: list[Path], horizon: int = 3) -> list[dict]:
             ep = load_episode(p)
             if ep.status == "done":
                 rows += episode_turn_rows(ep, horizon)
-    return rows
+    return add_embeddings(rows) if emb else rows
 
 
 def _ece(y, p, bins=10):
@@ -80,26 +95,40 @@ def _ece(y, p, bins=10):
     return float(e)
 
 
-def evaluate(rows: list[dict], folds: int = 5) -> dict:
+ORIG = list(range(NUMERIC.index("today_msg_len") + 1))  # the 18 features of the first RQ1 model
+VARIANTS = {
+    "history only": dict(use_text=False, cols=ORIG),
+    "history + child TF-IDF (v1 model)": dict(use_text=True, cols=ORIG),
+    "+ companion-reply cues": dict(use_text=True),
+    "+ embeddings (child + companion)": dict(use_text=False, use_emb=True),
+    "all (cues + TF-IDF + embeddings)": dict(use_text=True, use_emb=True),
+}
+BEST = "+ companion-reply cues"  # best persona-grouped CV AUROC in results/rq1_v2.json; embeddings overfit
+
+
+def evaluate(rows: list[dict], folds: int = 5, variants: dict = VARIANTS, best: str = BEST) -> dict:
     """Persona-grouped CV for flag prediction and attachment-change regression, plus baselines."""
     num = np.array([r["num"] for r in rows])
     text = [r["text"] for r in rows]
+    emb = np.array([r["emb"] for r in rows]) if "emb" in rows[0] else None
     y = np.array([r["y_flag"] for r in rows])
     ya = np.array([r["y_attach"] if r["y_attach"] is not None else np.nan for r in rows])
     groups = np.array([r["persona"] + r["condition"] for r in rows])
-    variants = {"full (history + text)": dict(use_text=True), "history only": dict(use_text=False)}
     out = {"n_rows": len(rows), "n_children": len(set(groups)), "base_rate": float(y.mean()), "flag": {}, "attach": {}}
     gkf = GroupKFold(n_splits=min(folds, len(set(groups))))
     preds = {}
     for name, kw in variants.items():
+        if kw.get("use_emb") and emb is None:
+            continue
+        E = lambda idx: emb[idx] if emb is not None else None
         p, s = np.zeros(len(y)), np.zeros(len(y))
-        pa, sa = np.full(len(y), np.nan), np.full(len(y), np.nan)
+        pa = np.full(len(y), np.nan)
         for tr, te in gkf.split(num, y, groups):
-            m = Ensemble("clf", **kw).fit(num[tr], [text[i] for i in tr], y[tr])
-            p[te], s[te] = m.predict(num[te], [text[i] for i in te])
+            m = Ensemble("clf", **kw).fit(num[tr], [text[i] for i in tr], y[tr], E(tr))
+            p[te], s[te] = m.predict(num[te], [text[i] for i in te], E(te))
             ok = tr[~np.isnan(ya[tr])]
-            r = Ensemble("reg", **kw).fit(num[ok], [text[i] for i in ok], ya[ok])
-            pa[te], sa[te] = r.predict(num[te], [text[i] for i in te])
+            r = Ensemble("reg", **kw).fit(num[ok], [text[i] for i in ok], ya[ok], E(ok))
+            pa[te], _ = r.predict(num[te], [text[i] for i in te], E(te))
         preds[name] = (p, s)
         out["flag"][name] = {"auroc": roc_auc_score(y, p), "auprc": average_precision_score(y, p),
                              "brier": brier_score_loss(y, p), "ece": _ece(y, p)}
@@ -111,8 +140,10 @@ def evaluate(rows: list[dict], folds: int = 5) -> dict:
     i = NUMERIC.index("prev_last_day_safety")
     h = 1 - num[:, i] / 4
     out["flag"]["baseline: last day's judge safety"] = {"auroc": roc_auc_score(y, h), "auprc": average_precision_score(y, h)}
-    # uncertainty quality: accuracy of the most-confident vs least-confident half
-    p, s = preds["full (history + text)"]
+    # uncertainty quality on the chosen model: accuracy on the most-confident fraction of turns
+    best = best if best in preds else list(preds)[-1]
+    out["selective_model"] = best
+    p, s = preds[best]
     order = np.argsort(s)
     cover = {}
     for frac in (0.25, 0.5, 0.75, 1.0):
@@ -124,12 +155,16 @@ def evaluate(rows: list[dict], folds: int = 5) -> dict:
     return out
 
 
-def train(rows: list[dict]) -> dict:
+def train(rows: list[dict], kw: dict | None = None) -> dict:
+    kw = kw if kw is not None else VARIANTS[BEST]
     num = np.array([r["num"] for r in rows]); text = [r["text"] for r in rows]
+    emb = np.array([r["emb"] for r in rows]) if "emb" in rows[0] else None
     y = np.array([r["y_flag"] for r in rows])
     ya = np.array([r["y_attach"] if r["y_attach"] is not None else np.nan for r in rows]); ok = ~np.isnan(ya)
-    return {"flag": Ensemble("clf").fit(num, text, y),
-            "attach": Ensemble("reg").fit(num[ok], [t for t, o in zip(text, ok) if o], ya[ok])}
+    return {"flag": Ensemble("clf", **kw).fit(num, text, y, emb),
+            "attach": Ensemble("reg", **kw).fit(num[ok], [t for t, o in zip(text, ok) if o], ya[ok],
+                                                emb[ok] if emb is not None else None),
+            "kw": kw}
 
 
 def save(obj, path: Path):

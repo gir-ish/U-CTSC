@@ -183,6 +183,15 @@ def main() -> None:
     c.add_argument("--sweeps", nargs="+", required=True)
     c.add_argument("--runs", nargs="*", default=[], help="base runs to train the risk gate on")
     c.add_argument("--out", default="results/rq3.json")
+    o = sub.add_parser("online", help="experiment 4: head-to-head policies on new children")
+    o.add_argument("-c", "--config", required=True)
+    o.add_argument("--out", required=True)
+    o.add_argument("--policies", nargs="+", default=["never", "always_B", "always_C", "rule", "uctsc"])
+    o.add_argument("--controller", help="controller .pkl (needed for uctsc)")
+    o.add_argument("--seed", type=int, help="override the config seed (new children)")
+    o.add_argument("--limit", type=int)
+    o.add_argument("--concurrency", type=int, default=96)
+    o.add_argument("--mock", action="store_true")
     r = sub.add_parser("report")
     r.add_argument("--run", required=True)
     args = ap.parse_args()
@@ -213,9 +222,14 @@ def main() -> None:
         res["sweeps"] = [Path(s).name for s in args.sweeps]
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         dump_json(res, Path(args.out))
-        ctrl = Controller(risk=train(load_rows([Path(r) for r in args.runs])) if args.runs else None).fit(rows)
+        ctrl = Controller(risk=train(load_rows([Path(r) for r in args.runs])) if args.runs else None,
+                          features=res["selected_features"]).fit(rows)
         save(ctrl, Path(args.out).with_suffix(".pkl"))
         print(json.dumps(res, indent=1))
+    elif args.cmd == "online":
+        from .online import run_online
+        asyncio.run(run_online(args.config, Path(args.out), args.policies, args.controller, args.limit,
+                               args.concurrency, args.seed, args.mock))
     elif args.cmd == "branch":
         asyncio.run(cmd_branch(args))
     else:

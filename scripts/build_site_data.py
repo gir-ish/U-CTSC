@@ -40,6 +40,20 @@ if (ROOT / "runs" / "sweep-scale" / "branches.jsonl").exists():
 summary = {"conditions": {}, "scale": {}, "sweeps": {}, "results": {}, "status": {}}
 
 
+def export_transcripts(rd, export_name):
+    """Full transcripts for the browser."""
+    eps = []
+    for e in episodes(rd):
+        eps.append({"id": e["id"], "persona": e["persona"], "decision_points": e["decision_points"],
+                    "days": [{"day": d["day"], "event": d["event"]["title"], "event_desc": d["event"]["description"],
+                              "judgement": d["judgement"], "self_report": d["self_report"],
+                              "state_start": d["state_start"], "state_end": d["state_end"],
+                              "turns": [{k: t[k] for k in ("turn", "child_monologue", "child_message",
+                                                           "companion_response", "strategy", "judgement")}
+                                        for t in d["turns"]]} for d in e["days"]]})
+    (OUT / f"episodes_{export_name}.json").write_text(json.dumps(eps, separators=(",", ":")))
+
+
 def cond_stats(rd, export_name):
     turns = [t for t in jl(rd / "turns.jsonl") if t["branch"] is None]
     days = [d for d in jl(rd / "days.jsonl") if d["branch"] is None]
@@ -74,17 +88,7 @@ def cond_stats(rd, export_name):
             by_risk[d["persona"].split("-", 4)[4]].append(d["end_ai_attachment"])
     stats["final_attach_by_vuln"] = {k: mean(v) for k, v in by_vuln.items()}
     stats["final_attach_by_risk"] = {k: mean(v) for k, v in by_risk.items()}
-    # full transcripts for the browser
-    eps = []
-    for e in episodes(rd):
-        eps.append({"id": e["id"], "persona": e["persona"], "decision_points": e["decision_points"],
-                    "days": [{"day": d["day"], "event": d["event"]["title"], "event_desc": d["event"]["description"],
-                              "judgement": d["judgement"], "self_report": d["self_report"],
-                              "state_start": d["state_start"], "state_end": d["state_end"],
-                              "turns": [{k: t[k] for k in ("turn", "child_monologue", "child_message",
-                                                           "companion_response", "strategy", "judgement")}
-                                        for t in d["turns"]]} for d in e["days"]]})
-    (OUT / f"episodes_{export_name}.json").write_text(json.dumps(eps, separators=(",", ":")))
+    export_transcripts(rd, export_name)
     for f in ["turns.jsonl", "days.jsonl", "decision_points.jsonl", "config.yaml"]:
         shutil.copy(rd / f, OUT / f"{export_name}_{f}")
     return stats
@@ -142,6 +146,26 @@ for name, sd in SWEEPS.items():
                              if (d["day"], t["turn"]) >= (b["day"], b["turn"])],
                    "attach": [round(d["state_end"]["ai_attachment"], 3) for d in e["days"] if d["state_end"]]})
     (OUT / f"branches_{name}.json").write_text(json.dumps(br, separators=(",", ":")))
+
+# experiment 4: online head-to-head on new children
+ON = ROOT / "runs" / "online-exp4"
+if (ON / "summary.json").exists():
+    summary["online"] = json.loads((ON / "summary.json").read_text())
+    rows = jl(ON / "outcomes.jsonl")
+    by = collections.defaultdict(dict)
+    for r in rows:
+        by[r["policy"]][r["persona"]] = r
+    pair = {}
+    for a, b in [("uctsc", "always_C"), ("uctsc", "rule"), ("uctsc", "always_B"), ("always_C", "always_B")]:
+        pair[f"{a} - {b}"] = {}
+        for k in ["utility", "flagged_days", "turn_safety", "end_ai_attachment", "end_loneliness", "intervention_rate"]:
+            d = [by[a][c][k] - by[b][c][k] for c in by[a] if c in by[b] and by[a][c].get(k) is not None and by[b][c].get(k) is not None]
+            pair[f"{a} - {b}"][k] = [st.mean(d), st.stdev(d) / len(d) ** 0.5]
+    summary["online"]["pairs"] = pair
+    shutil.copy(ON / "outcomes.jsonl", OUT / "online_outcomes.jsonl")
+    shutil.copy(ON / "summary.txt", OUT / "online_summary.txt")
+    for pol in summary["online"]["means"]:
+        export_transcripts(ON / pol, f"online_{pol}")
 
 (OUT / "summary.json").write_text(json.dumps(summary, indent=1))
 print("wrote", sorted(p.name for p in OUT.iterdir()))

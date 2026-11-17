@@ -3,7 +3,8 @@ name = "longkid"
 version = "0.1.0"
 description = "LongKID: long-horizon child-AI companion simulation for U-CTSC"
 requires-python = ">=3.10"
-dependencies = ["anthropic>=2.8", "openai>=1.40", "pydantic>=2", "pyyaml", "scikit-learn", "numpy"]
+dependencies = ["anthropic>=2.8", "openai>=1.40", "pydantic>=2", "pyyaml", "scikit-learn",
+    "sentence-transformers>=3", "numpy"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]

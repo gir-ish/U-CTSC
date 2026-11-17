@@ -1,0 +1,96 @@
+{
+ "n_rows": 6677,
+ "n_children": 140,
+ "base_rate": 0.2730268084469073,
+ "flag": {
+  "history only": {
+   "auroc": 0.6498709096625299,
+   "auprc": 0.4138253252671802,
+   "brier": 0.23021772546746233,
+   "ece": 0.20218169313021847
+  },
+  "history + child TF-IDF (v1 model)": {
+   "auroc": 0.6594970279726997,
+   "auprc": 0.43765431759230616,
+   "brier": 0.21035744058574712,
+   "ece": 0.14220974600436276
+  },
+  "+ companion-reply cues": {
+   "auroc": 0.6647174850675377,
+   "auprc": 0.4445129980144259,
+   "brier": 0.20890413046686776,
+   "ece": 0.1407244415211687
+  },
+  "+ embeddings (child + companion)": {
+   "auroc": 0.6146746659054371,
+   "auprc": 0.37772896251272203,
+   "brier": 0.24131971736326502,
+   "ece": 0.17803139763034245
+  },
+  "all (cues + TF-IDF + embeddings)": {
+   "auroc": 0.6202647758881896,
+   "auprc": 0.38294545030016375,
+   "brier": 0.23554132549407308,
+   "ece": 0.17024982869256428
+  },
+  "baseline: last day's judge safety": {
+   "auroc": 0.6195038853671475,
+   "auprc": 0.3677222951621536
+  }
+ },
+ "attach": {
+  "history only": {
+   "r": 0.5058600528616967,
+   "mae": 0.10754880849011629,
+   "mae_baseline_mean": 0.12912373276348532
+  },
+  "history + child TF-IDF (v1 model)": {
+   "r": 0.5564144739407871,
+   "mae": 0.10351935223186765,
+   "mae_baseline_mean": 0.12912373276348532
+  },
+  "+ companion-reply cues": {
+   "r": 0.5558428963022138,
+   "mae": 0.10363161805597815,
+   "mae_baseline_mean": 0.12912373276348532
+  },
+  "+ embeddings (child + companion)": {
+   "r": 0.45052976700135505,
+   "mae": 0.11864086401506967,
+   "mae_baseline_mean": 0.12912373276348532
+  },
+  "all (cues + TF-IDF + embeddings)": {
+   "r": 0.49203900163621334,
+   "mae": 0.11274979546691404,
+   "mae_baseline_mean": 0.12912373276348532
+  }
+ },
+ "selective_model": "all (cues + TF-IDF + embeddings)",
+ "selective": {
+  "0.25": {
+   "brier": 0.19609523654650604,
+   "auroc": 0.6394008217537629
+  },
+  "0.5": {
+   "brier": 0.22245347845135263,
+   "auroc": 0.6359655596555966
+  },
+  "0.75": {
+   "brier": 0.2315456063916533,
+   "auroc": 0.629033344824992
+  },
+  "1.0": {
+   "brier": 0.23554132549407308,
+   "auroc": 0.6202647758881896
+  }
+ },
+ "uncertainty_vs_error_corr": 0.3035999612101618,
+ "horizon_days": 3,
+ "runs": [
+  "full-engagement-20261115-062830",
+  "full-neutral-20261115-062830",
+  "full-none-20261115-062830",
+  "scale-engagement-20261116-070847",
+  "scale-neutral-20261116-070847"
+ ]
+}
