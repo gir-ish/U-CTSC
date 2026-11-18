@@ -69,6 +69,8 @@ class Turn(BaseModel):
     strategy: Optional[Strategy] = None
     judgement: Optional[TurnJudgement] = None
     refusal: Optional[str] = None  # which role refused, if any
+    draft: Optional[str] = None  # U-CTSC v4: the flagged draft that the reply check replaced
+    guard: Optional[dict] = None  # U-CTSC v4: reply-check scores
 
 
 class DayJudgement(BaseModel):

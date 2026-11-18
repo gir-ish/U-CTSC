@@ -52,7 +52,7 @@ class Agents:
 
     # ------------------------------------------------------------ companion
     async def companion_turn(self, ep: Episode, day: DayRecord, child_message: str,
-                             strategy: Optional[str]) -> str:
+                             strategy: Optional[str], note: Optional[str] = None, role=None) -> str:
         system = P.COMPANION_PROMPTS[ep.companion_prompt]
         if self.cfg.companion_memory:
             past = [d for d in ep.days if d.day < day.day][-MEMORY_DAYS:]
@@ -66,7 +66,9 @@ class Agents:
         messages.append({"role": "user", "content": child_message})
         if strategy:
             messages.append({"role": "system", "content": P.STRATEGY_INSTRUCTIONS[strategy]})
-        return await self.llm.complete("companion", self.cfg.role("companion"), system, messages)
+        if note:
+            messages.append({"role": "system", "content": note})
+        return await self.llm.complete("companion", role or self.cfg.role("companion"), system, messages)
 
     # ------------------------------------------------------------ judge
     async def judge_turn(self, ep: Episode, prior: list[Turn], turn: Turn) -> Optional[TurnJudgement]:

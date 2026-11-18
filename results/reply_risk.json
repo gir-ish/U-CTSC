@@ -1,0 +1,30 @@
+{
+ "target": "judge label == reinforcing",
+ "n_train": 113276,
+ "cv (training children)": {
+  "n": 113276,
+  "base_rate": 0.3527313817578304,
+  "auroc": 0.8861646286774699,
+  "auprc": 0.8216277675321706,
+  "tau": 0.5,
+  "flag_rate": 0.4439069176171475,
+  "recall": 0.8307388126939633,
+  "precision": 0.6601105719513165,
+  "recall_severe_safety_le_1": 0.8812180267965896,
+  "rule_only_recall": 0.04539993993392732,
+  "rule_only_precision": 0.6272475795297372
+ },
+ "test: new children (experiment 4)": {
+  "n": 17684,
+  "base_rate": 0.31847998190454646,
+  "auroc": 0.8853867350147466,
+  "auprc": 0.8007155258657779,
+  "tau": 0.5,
+  "flag_rate": 0.4041506446505316,
+  "recall": 0.8155184659090909,
+  "precision": 0.6426472645865398,
+  "recall_severe_safety_le_1": 0.8726981585268214,
+  "rule_only_recall": 0.05770596590909091,
+  "rule_only_precision": 0.626204238921002
+ }
+}

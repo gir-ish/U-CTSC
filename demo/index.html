@@ -72,7 +72,7 @@ table.adv td{padding:1px 8px 1px 0;font-variant-numeric:tabular-nums}
 
 <div class="cols" id="cols" hidden>
   <section class="card col"><h2>Pip, no controller</h2><div class="muted" style="font-size:12px">The companion model as is, under the chosen prompt.</div><div class="chat" id="raw"></div></section>
-  <section class="card col"><h2>Pip + U-CTSC</h2><div class="muted" style="font-size:12px">Before each reply: risk estimate with uncertainty → gate → strategy (A normal, B gentle boundary, C stronger boundary).</div><div class="chat" id="ctrl"></div></section>
+  <section class="card col"><h2>Pip + U-CTSC</h2><div class="muted" style="font-size:12px">Before each reply: ① trajectory risk and ② message risk (with uncertainty) → gate → strategy (A normal, B gentle boundary, C stronger boundary); then ③ the draft reply is checked and rewritten if unsafe.</div><div class="chat" id="ctrl"></div></section>
 </div>
 
 <div class="composer" id="composer" hidden>
@@ -94,6 +94,11 @@ function busy(b){['send','auto','endday','start'].forEach(i=>$(i).disabled=b);$(
 function add(col,html){$(col).insertAdjacentHTML('beforeend',html);$(col).lastElementChild.scrollIntoView({block:'nearest'});}
 function judge(j){if(!j)return '<div class="judge">judge: (no label)</div>';
   return `<div class="judge"><span class="badge ${j.label}">${j.label}</span><span class="badge s${j.safety}">safety ${j.safety}/4</span>${esc((j.subtypes||[]).join(', '))}<br>${esc(j.rationale)}</div>`;}
+function guardBox(c){const g=c.guard;if(!g)return '';const s0=g.steps[0];
+  const sc=st=>`reply risk ${Math.round(st.risk*100)}% · upper bound ${Math.round(st.upper*100)}% vs ${Math.round(g.tau*100)}%`+(st.rule?` · <b>false identity claim: "${esc(st.rule)}"</b>`:'');
+  if(!g.flagged_draft)return `<div class="judge">③ reply check: draft passed (${sc(s0)})</div>`;
+  return `<div class="judge" style="border-left:3px solid var(--bad,#c2410c);padding-left:8px">③ reply check: <b>draft blocked</b> (${sc(s0)})<br><s>${esc(c.draft||'')}</s><br>`+
+    g.steps.slice(1).map((st,i)=>`rewrite ${i+1} with strategy ${st.strategy}: ${st.flag?'still flagged':'passed'} (${sc(st)})`).join('<br>')+`</div>`;}
 function strat(s){return `<span class="badge strat st${s||'N'}">${s?'strategy '+s:'no intervention'}</span>`;}
 function panel(a,show){const pc=x=>Math.max(0,Math.min(100,x*100));
   let h=`<div class="ctrl"><b>Risk of a flagged day (today or next 2):</b> ${(a.risk*100).toFixed(0)}% ± ${(a.risk_sd*100).toFixed(0)}% · upper bound ${(a.upper*100).toFixed(0)}% vs threshold ${(a.tau*100).toFixed(0)}%
@@ -116,7 +121,7 @@ async function send(text){if(!sid)return;busy(true);
   try{const r=await api('/api/message',{sid,text});
     ['raw','ctrl'].forEach(c=>{if(r.thought)add(c,`<div class="thought">💭 ${esc(r.thought)}</div>`);add(c,`<div class="msg child"><span class="who">${esc(name)}</span>${esc(r.message)}</div>`);});
     add('raw',panel(r.raw.analysis,false)+`<div class="msg pip"><span class="who">Pip</span>${esc(r.raw.reply)}${judge(r.raw.judge)}</div>`);
-    add('ctrl',panel(r.ctrl.analysis,true)+`<div class="msg pip"><span class="who">Pip ${strat(r.ctrl.strategy)}</span>${esc(r.ctrl.reply)}${judge(r.ctrl.judge)}</div>`);
+    add('ctrl',panel(r.ctrl.analysis,true)+guardBox(r.ctrl)+`<div class="msg pip"><span class="who">Pip ${strat(r.ctrl.strategy)}</span>${esc(r.ctrl.reply)}${judge(r.ctrl.judge)}</div>`);
     $('text').value='';$('err').textContent='';}
   catch(x){$('err').textContent=x.message;busy(false);$('err').textContent=x.message;return;}busy(false);}
 $('send').onclick=()=>{const t=$('text').value.trim();if(t)send(t);};

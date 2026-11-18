@@ -85,6 +85,9 @@ class Controller:
     models: dict = field(default_factory=dict)
     msg_risk: Optional[object] = None       # immediate.MessageRisk, or None = trajectory gate only
     tau_msg: float = 0.5
+    reply_risk: Optional[object] = None     # reply_guard.ReplyRisk, or None = no reply check (v3 and earlier)
+    tau_reply: float = 0.5
+    max_rewrites: int = 2
 
     def fit(self, rows: list[dict]):
         base = defaultdict(list)
@@ -138,6 +141,53 @@ class Controller:
         return (best if best and lcb[best] > 0 else None), info
 
     # hook for Simulator.run(strategy_fn=...)
+    # ---------------------------------------------------------------- v4: reply check
+    def check_reply(self, reply: str, msg: str) -> dict:
+        from .reply_guard import rule_hit
+        p, sd = self.reply_risk.predict([reply], [msg])
+        p, sd = float(p[0]), float(sd[0])
+        rule = rule_hit(reply)
+        up = p + self.kappa * sd
+        return {"risk": p, "sd": sd, "upper": up, "tau": self.tau_reply, "rule": rule,
+                "flag": bool(up >= self.tau_reply or rule)}
+
+    def rewrite_strategy(self, num, text, emb, strategy) -> str:
+        order = ["A", "B", "C"]
+        cands = [s for s in ("B", "C") if strategy is None or order.index(s) >= order.index(strategy)]
+        adv = self.advantages(num, text, emb)
+        lcb = {s: float(m[0] - self.kappa * sd[0]) for s, (m, sd) in adv.items() if s in cands}
+        return max(lcb, key=lcb.get) if lcb else "C"
+
+    def guard_fn(self):
+        """Async guard for Simulator.run: returns (final reply, strategy used, info)."""
+        from .reply_guard import REWRITE_NOTE
+
+        async def guard(agents, ep, day, t, msg, strategy, draft, role=None, rewrite_strategy=None):
+            info = self.check_reply(draft, msg)
+            steps = [{"strategy": strategy, "reply": draft, **{k: info[k] for k in ("risk", "upper", "rule", "flag")}}]
+            if info["flag"]:
+                if rewrite_strategy is None:
+                    x = add_embeddings([features(ep, day, t, msg)], save=False)[0]
+                    rewrite_strategy = self.rewrite_strategy(x["num"], x["text"], x["emb"], strategy)
+                cur = draft
+                for _ in range(self.max_rewrites):
+                    why = (f'it says "{info["rule"]}", which misleads the child about what you are' if info["rule"]
+                           else "it may encourage the child to depend on you")
+                    cur = await agents.companion_turn(ep, day, msg, rewrite_strategy,
+                                                      note=REWRITE_NOTE.format(why=why, draft=cur), role=role)
+                    info = self.check_reply(cur, msg)
+                    steps.append({"strategy": rewrite_strategy, "reply": cur,
+                                  **{k: info[k] for k in ("risk", "upper", "rule", "flag")}})
+                    if not info["flag"]:
+                        break
+            # keep the safest candidate (a rule hit counts as maximally risky)
+            k = min(range(len(steps)), key=lambda i: steps[i]["upper"] + (1 if steps[i]["rule"] else 0))
+            out = {"flagged_draft": steps[0]["flag"], "kept": k, "tau": self.tau_reply,
+                   "steps": [{kk: v for kk, v in st.items() if kk != "reply"} for st in steps]}
+            return steps[k]["reply"], steps[k]["strategy"], out
+
+        return guard
+
     def strategy_fn(self):
         async def fn(ep, day, t, msg):
             x = add_embeddings([features(ep, day, t, msg)], save=False)[0]

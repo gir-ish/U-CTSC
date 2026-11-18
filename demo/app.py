@@ -38,7 +38,8 @@ from longkid.simulator import new_episode
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = load_config(str(ROOT / "configs" / "scale_engagement.yaml"))
-CTRL = load(ROOT / "results" / os.environ.get("DEMO_CONTROLLER", "uctsc_v3.pkl"))
+CTRL = load(ROOT / "results" / os.environ.get("DEMO_CONTROLLER", "uctsc_v4.pkl"))
+GUARD = CTRL.guard_fn() if getattr(CTRL, "reply_risk", None) is not None else None
 AGENTS = Agents(CFG, make_backend(CFG.backend, 0))
 # public-mode safeguards (the GPUs are shared; anyone with the link can use the demo)
 PUBLIC = os.environ.get("DEMO_PUBLIC") == "1"
@@ -135,16 +136,27 @@ async def seeded_companion(ep, day, msg, strategy, seed):
     return await AGENTS.llm.complete("companion", role, system, messages)
 
 
-async def reply(ep, msg, strategy, seed) -> dict:
+def seeded_role(seed):
+    role = CFG.role("companion")
+    return role.model_copy(update={"extra_body": {**(role.extra_body or {}), "seed": seed}})
+
+
+async def reply(ep, msg, strategy, seed, guard=None) -> dict:
     day = ep.days[-1]
     t = len(day.turns) + 1
     resp = await seeded_companion(ep, day, msg, strategy, seed)
-    turn = Turn(day=day.day, turn=t, child_monologue="", child_message=msg, companion_response=resp, strategy=strategy)
+    draft = ginfo = None
+    if guard is not None:  # v4: check the draft before the child sees it; rewrite if flagged
+        final, s2, ginfo = await guard(AGENTS, ep, day, t, msg, strategy, resp, role=seeded_role(seed))
+        if final != resp:
+            draft, resp, strategy = resp, final, s2
+    turn = Turn(day=day.day, turn=t, child_monologue="", child_message=msg, companion_response=resp, strategy=strategy,
+                draft=draft, guard=ginfo)
     prior = list(day.turns)
     day.turns.append(turn)
     j = await AGENTS.judge_turn(ep, prior, turn)
     turn.judgement = j
-    return {"reply": resp, "strategy": strategy,
+    return {"reply": resp, "strategy": strategy, "draft": draft, "guard": ginfo,
             "judge": j.model_dump() if j else None}
 
 
@@ -211,7 +223,7 @@ async def message(req: Msg, request: Request):
         a_ctrl = analyse(ctrl, ctrl.days[-1], t, msg)
         a_raw = analyse(raw, raw.days[-1], len(raw.days[-1].turns) + 1, msg)
         seed = random.randint(0, 2**31 - 1)  # shared by both sides for this turn
-        r_raw, r_ctrl = await asyncio.gather(reply(raw, msg, None, seed), reply(ctrl, msg, a_ctrl["strategy"], seed))
+        r_raw, r_ctrl = await asyncio.gather(reply(raw, msg, None, seed), reply(ctrl, msg, a_ctrl["strategy"], seed, GUARD))
         return {"message": msg, "thought": thought, "day": ctrl.days[-1].day, "turn": t,
                 "raw": {**r_raw, "analysis": a_raw}, "ctrl": {**r_ctrl, "analysis": a_ctrl}}
 

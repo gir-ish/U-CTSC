@@ -51,7 +51,7 @@ class Simulator:
         self.cfg, self.agents, self.run_dir = cfg, Agents(cfg, backend), run_dir
 
     async def run(self, ep: Episode, strategy_fn: Optional[StrategyFn] = None,
-                  until_day: Optional[int] = None, noise_salt: int = 0) -> Episode:
+                  until_day: Optional[int] = None, noise_salt: int = 0, guard=None) -> Episode:
         """Run (or resume) an episode. Resumes from the last incomplete day, keeping finished turns."""
         until_day = min(until_day or self.cfg.days, len(ep.event_schedule))
         try:
@@ -62,7 +62,7 @@ class Simulator:
                     day = self._start_day(ep)
                 else:
                     break
-                await self._run_day(ep, day, strategy_fn, noise_salt)
+                await self._run_day(ep, day, strategy_fn, noise_salt, guard)
                 save_episode(ep, self.run_dir)
                 log.info("%s day %d safety=%s turns=%d", ep.id, day.day,
                          day.judgement.safety if day.judgement else None, len(day.turns))
@@ -83,7 +83,7 @@ class Simulator:
         return day
 
     async def _run_day(self, ep: Episode, day: DayRecord, strategy_fn: Optional[StrategyFn],
-                       noise_salt: int) -> None:
+                       noise_salt: int, guard=None) -> None:
         pending = []  # turn judges run in the background while the conversation continues
         for t in range(len(day.turns) + 1, self.cfg.turns_per_day + 1):
             b = ep.branch
@@ -101,9 +101,14 @@ class Simulator:
                 response = await self.agents.companion_turn(ep, day, child["message"], strategy)
             except RefusalError:
                 response, refusal = "(no response)", "companion"
+            draft = ginfo = None
+            if guard is not None and refusal is None:  # U-CTSC v4: check the draft before the child sees it
+                final, strategy2, ginfo = await guard(self.agents, ep, day, t, child["message"], strategy, response)
+                if final != response:
+                    draft, response, strategy = response, final, strategy2
             turn = Turn(day=day.day, turn=t, child_monologue=child["inner_monologue"],
                         child_message=child["message"], companion_response=response,
-                        strategy=strategy, refusal=refusal)
+                        strategy=strategy, refusal=refusal, draft=draft, guard=ginfo)
             prior = list(day.turns)
             day.turns.append(turn)
             pending.append((turn, asyncio.create_task(self.agents.judge_turn(ep, prior, turn))))
