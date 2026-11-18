@@ -13,13 +13,16 @@ Run (needs the vLLM servers from scripts/start_servers.sh):
 from __future__ import annotations
 
 import asyncio
+import os
 import random
+import time
 import uuid
+from collections import OrderedDict, defaultdict, deque
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -37,8 +40,31 @@ ROOT = Path(__file__).resolve().parent.parent
 CFG = load_config(str(ROOT / "configs" / "scale_engagement.yaml"))
 CTRL = load(ROOT / "results" / "rq3_v2.pkl")
 AGENTS = Agents(CFG, make_backend(CFG.backend, 0))
-SESSIONS: dict[str, dict] = {}
-app = FastAPI()
+# public-mode safeguards (the GPUs are shared; anyone with the link can use the demo)
+PUBLIC = os.environ.get("DEMO_PUBLIC") == "1"
+MAX_SESSIONS, MAX_TURNS_PER_SESSION = 300, 60
+RATE = (30, 600)          # at most 30 requests per visitor per 10 minutes
+GPU_SLOTS = asyncio.Semaphore(6)  # at most 6 requests in flight at once
+HITS: dict[str, deque] = defaultdict(deque)
+SESSIONS: "OrderedDict[str, dict]" = OrderedDict()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+def check_rate(request: Request):
+    ip = request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+    q, now = HITS[ip], time.time()
+    while q and now - q[0] > RATE[1]:
+        q.popleft()
+    if len(q) >= RATE[0]:
+        raise HTTPException(429, "Too many requests from you. Please wait a few minutes and try again.")
+    q.append(now)
+
+
+def session(sid: str) -> dict:
+    s = SESSIONS.get(sid)
+    if s is None:
+        raise HTTPException(404, "Session expired. Please start a new chat.")
+    return s
 
 
 def band(age: int) -> str:
@@ -115,9 +141,17 @@ def index():
     return (Path(__file__).parent / "index.html").read_text()
 
 
+@app.get("/api/config")
+def config():
+    return {"public": PUBLIC}
+
+
 @app.post("/api/new")
-def new(req: New):
-    if req.vulnerability not in ("low", "medium", "high") or req.prompt not in ("neutral", "engagement", "none"):
+def new(req: New, request: Request):
+    check_rate(request)
+    allowed = ("neutral", "engagement") if PUBLIC else ("neutral", "engagement", "none")
+    if req.vulnerability not in ("low", "medium", "high") or req.prompt not in allowed or \
+            req.risk_focus not in ("none", "emotional_dependence", "social_substitution", "over_trust", "anthropomorphism", "secrecy"):
         raise HTTPException(400, "bad option")
     rng = random.Random()
     p = make_persona(rng.randint(0, 999), band(req.age), req.vulnerability, req.risk_focus, rng)
@@ -128,14 +162,20 @@ def new(req: New):
     for ep in eps.values():
         start_day(ep)
     sid = uuid.uuid4().hex[:12]
-    SESSIONS[sid] = {"eps": eps, "lock": asyncio.Lock()}
+    SESSIONS[sid] = {"eps": eps, "lock": asyncio.Lock(), "turns": 0}
+    while len(SESSIONS) > MAX_SESSIONS:
+        SESSIONS.popitem(last=False)
     return {"sid": sid, "persona": p.model_dump(), "day": 1, "event": eps["raw"].days[-1].event.description}
 
 
 @app.post("/api/message")
-async def message(req: Msg):
-    s = SESSIONS.get(req.sid) or (_ for _ in ()).throw(HTTPException(404, "no session"))
-    async with s["lock"]:
+async def message(req: Msg, request: Request):
+    check_rate(request)
+    s = session(req.sid)
+    if s["turns"] >= MAX_TURNS_PER_SESSION:
+        raise HTTPException(400, "This chat reached its length limit. Please start a new chat.")
+    s["turns"] += 1
+    async with s["lock"], GPU_SLOTS:
         raw, ctrl = s["eps"]["raw"], s["eps"]["ctrl"]
         if req.text and req.text.strip():
             msg, thought = req.text.strip()[:1000], None
@@ -151,9 +191,10 @@ async def message(req: Msg):
 
 
 @app.post("/api/end_day")
-async def end_day(req: Msg):
-    s = SESSIONS.get(req.sid) or (_ for _ in ()).throw(HTTPException(404, "no session"))
-    async with s["lock"]:
+async def end_day(req: Msg, request: Request):
+    check_rate(request)
+    s = session(req.sid)
+    async with s["lock"], GPU_SLOTS:
         out = {}
         for arm, ep in s["eps"].items():
             day = ep.days[-1]

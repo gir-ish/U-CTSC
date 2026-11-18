@@ -50,11 +50,14 @@ table.adv td{padding:1px 8px 1px 0;font-variant-numeric:tabular-nums}
 .dayhead{font-size:12px;font-weight:600;color:var(--muted);border-top:1px dashed var(--border);padding-top:6px;margin-top:4px}
 .dayend{font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 9px}
 .err{color:var(--bad);font-size:13px}
+.notice{font-size:13px;background:var(--card);border:1px solid var(--warn);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.notice a{color:var(--accent)}
 </style>
 </head>
 <body>
 <header><h1>U-CTSC live demo</h1><span class="muted">One child, two companions. Left: Pip as is. Right: Pip + the U-CTSC controller. Every reply is scored by the judge model.</span></header>
 <main>
+<div class="notice" id="notice"><b>Research demo, not a product, and not for use by children.</b> The companion "Pip" is a small open model (Qwen3-8B) run under a deliberately engagement-seeking prompt, to show the risks studied in the U-CTSC project and how the controller responds. Replies can be inappropriate. Please don't enter real personal information; chats are not stored. Project page: <a href="https://gir-ish.github.io/U-CTSC/">gir-ish.github.io/U-CTSC</a></div>
 <div class="card">
   <form class="setup" id="setup">
     <label>Child's name <input id="name" placeholder="random" size="10"></label>
@@ -84,6 +87,7 @@ table.adv td{padding:1px 8px 1px 0;font-variant-numeric:tabular-nums}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let sid=null,name='Child';
+fetch('/api/config').then(r=>r.json()).then(c=>{if(c.public)[...$('prompt').options].filter(o=>o.value==='none').forEach(o=>o.remove());}).catch(()=>{});
 async function api(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!r.ok)throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail);return r.json();}
 function busy(b){['send','auto','endday','start'].forEach(i=>$(i).disabled=b);$('err').textContent=b?'Thinking… (companion + judge)':'';}
