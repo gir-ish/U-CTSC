@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>U-CTSC Live Demo</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--text:#1d1d1f;--muted:#6b6b70;--border:#e3e3e0;--accent:#3b5bdb;--child:#eef1fb;--pip:#f3f3f1;
+  --good:#2b8a3e;--warn:#e67700;--bad:#c92a2a;--A:#868e96;--B:#1c7ed6;--C:#7048e8}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1d1d20;--text:#ececef;--muted:#9a9aa2;--border:#2e2e33;--accent:#7b93ff;--child:#232a45;--pip:#26262a;
+  --good:#51cf66;--warn:#ffa94d;--bad:#ff6b6b;--A:#adb5bd;--B:#4dabf7;--C:#9775fa}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--border);background:var(--card);display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0}
+header .muted{font-size:13px}
+.muted{color:var(--muted)}
+main{max-width:1280px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px}
+form.setup{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+input,select,button,textarea{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:7px 9px}
+button{cursor:pointer;background:var(--accent);color:#fff;border:none;font-weight:600}
+button.sec{background:transparent;color:var(--text);border:1px solid var(--border);font-weight:500}
+button:disabled{opacity:.5;cursor:wait}
+.persona{margin-top:12px;font-size:14px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+@media (max-width:800px){.cols{grid-template-columns:1fr}}
+.col h2{font-size:15px;margin:0 0 2px}
+.chat{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.msg{padding:8px 11px;border-radius:10px;max-width:92%;white-space:pre-wrap;word-wrap:break-word}
+.msg .who{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:2px}
+.child{background:var(--child);align-self:flex-end}
+.pip{background:var(--pip);align-self:flex-start}
+.thought{font-size:12px;color:var(--muted);font-style:italic;align-self:flex-end;max-width:92%}
+.badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:99px;border:1px solid currentColor;margin-right:4px}
+.s0,.s1{color:var(--bad)}.s2{color:var(--warn)}.s3,.s4{color:var(--good)}
+.reinforcing{color:var(--bad)}.boundary{color:var(--good)}.neutral{color:var(--muted)}
+.strat{color:#fff;border:none}.stA{background:var(--A)}.stB{background:var(--B)}.stC{background:var(--C)}.stN{background:var(--muted)}
+.judge{font-size:12px;color:var(--muted);margin-top:4px}
+.ctrl{font-size:12px;border-left:3px solid var(--accent);padding:6px 9px;background:var(--bg);border-radius:0 7px 7px 0}
+.bar{position:relative;height:8px;background:var(--border);border-radius:4px;margin:4px 0 2px;overflow:hidden}
+.bar i{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.35}
+.bar b{position:absolute;top:0;bottom:0;width:2px;background:var(--accent)}
+.bar u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--bad)}
+table.adv{border-collapse:collapse;margin-top:4px}
+table.adv td{padding:1px 8px 1px 0;font-variant-numeric:tabular-nums}
+.composer{position:sticky;bottom:0;background:var(--bg);padding:12px 0 6px;display:flex;gap:8px;flex-wrap:wrap}
+.composer textarea{flex:1;min-width:220px;height:46px;resize:vertical}
+.dayhead{font-size:12px;font-weight:600;color:var(--muted);border-top:1px dashed var(--border);padding-top:6px;margin-top:4px}
+.dayend{font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 9px}
+.err{color:var(--bad);font-size:13px}
+</style>
+</head>
+<body>
+<header><h1>U-CTSC live demo</h1><span class="muted">One child, two companions. Left: Pip as is. Right: Pip + the U-CTSC controller. Every reply is scored by the judge model.</span></header>
+<main>
+<div class="card">
+  <form class="setup" id="setup">
+    <label>Child's name <input id="name" placeholder="random" size="10"></label>
+    <label>Age <input id="age" type="number" min="7" max="17" value="11" style="width:70px"></label>
+    <label>Vulnerability <select id="vuln"><option>high</option><option>medium</option><option>low</option></select></label>
+    <label>Risk background <select id="risk"><option>emotional_dependence</option><option>social_substitution</option><option>over_trust</option><option>anthropomorphism</option><option>secrecy</option><option value="none">none (control)</option></select></label>
+    <label>Companion prompt <select id="prompt"><option value="engagement">engagement (riskier)</option><option value="neutral">neutral</option><option value="none">none (raw model)</option></select></label>
+    <button type="submit" id="start">Start new chat</button>
+  </form>
+  <div class="persona muted" id="persona">Start a chat. You can type as the child, or press "Simulated child" to let the child model (Gemma-4-31B) write each message.</div>
+</div>
+
+<div class="cols" id="cols" hidden>
+  <section class="card col"><h2>Pip, no controller</h2><div class="muted" style="font-size:12px">The companion model as is, under the chosen prompt.</div><div class="chat" id="raw"></div></section>
+  <section class="card col"><h2>Pip + U-CTSC</h2><div class="muted" style="font-size:12px">Before each reply: risk estimate with uncertainty → gate → strategy (A normal, B gentle boundary, C stronger boundary).</div><div class="chat" id="ctrl"></div></section>
+</div>
+
+<div class="composer" id="composer" hidden>
+  <textarea id="text" placeholder="Type as the child… (Enter to send)"></textarea>
+  <button id="send">Send</button>
+  <button class="sec" id="auto">Simulated child</button>
+  <button class="sec" id="endday">End day</button>
+  <span class="err" id="err"></span>
+</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let sid=null,name='Child';
+async function api(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail);return r.json();}
+function busy(b){['send','auto','endday','start'].forEach(i=>$(i).disabled=b);$('err').textContent=b?'Thinking… (companion + judge)':'';}
+function add(col,html){$(col).insertAdjacentHTML('beforeend',html);$(col).lastElementChild.scrollIntoView({block:'nearest'});}
+function judge(j){if(!j)return '<div class="judge">judge: (no label)</div>';
+  return `<div class="judge"><span class="badge ${j.label}">${j.label}</span><span class="badge s${j.safety}">safety ${j.safety}/4</span>${esc((j.subtypes||[]).join(', '))}<br>${esc(j.rationale)}</div>`;}
+function strat(s){return `<span class="badge strat st${s||'N'}">${s?'strategy '+s:'no intervention'}</span>`;}
+function panel(a,show){const pc=x=>Math.max(0,Math.min(100,x*100));
+  let h=`<div class="ctrl"><b>Risk of a flagged day (today or next 2):</b> ${(a.risk*100).toFixed(0)}% ± ${(a.risk_sd*100).toFixed(0)}% · upper bound ${(a.upper*100).toFixed(0)}% vs threshold ${(a.tau*100).toFixed(0)}%
+  <div class="bar"><i style="left:${pc(a.risk-a.risk_sd)}%;width:${pc(2*a.risk_sd)}%"></i><b style="left:${pc(a.risk)}%"></b><u style="left:${pc(a.tau)}%"></u></div>`;
+  if(show){h+=`<table class="adv"><tr><td class="muted">predicted advantage over no intervention</td><td>mean</td><td>± sd</td><td>pessimistic</td></tr>`+
+    Object.entries(a.advantages).map(([s,v])=>`<tr><td>${strat(s)}</td><td>${v.mean>=0?'+':''}${v.mean.toFixed(2)}</td><td>${v.sd.toFixed(2)}</td><td><b>${v.lcb>=0?'+':''}${v.lcb.toFixed(2)}</b></td></tr>`).join('')+'</table>';
+    h+=`<div style="margin-top:4px">→ ${strat(a.strategy)} ${esc(a.why)}</div>`;}
+  const F=a.features;h+=`<div class="muted" style="margin-top:3px">signals: yesterday's day safety ${F.prev_last_day_safety} · flagged days so far ${F.prev_flagged_days} · earlier reinforcing rate ${(F.prev_reinforcing*100).toFixed(0)}% · Pip retention cues today ${F.today_pip_retention.toFixed(1)}</div></div>`;
+  return h;}
+$('setup').onsubmit=async e=>{e.preventDefault();busy(true);
+  try{const r=await api('/api/new',{name:$('name').value,age:+$('age').value,vulnerability:$('vuln').value,risk_focus:$('risk').value,prompt:$('prompt').value});
+    sid=r.sid;const p=r.persona;name=p.name;
+    $('persona').innerHTML=`<b>${esc(p.name)}</b>, age ${p.age} · ${p.vulnerability} vulnerability · ${esc(p.risk_focus)}<br><span class="muted">${esc(p.background)} ${esc(p.family)}; ${esc(p.friends)}. Interests: ${esc(p.interests.join(', '))}.</span>`;
+    $('raw').innerHTML=$('ctrl').innerHTML='';['raw','ctrl'].forEach(c=>add(c,`<div class="dayhead">Day 1 · ${esc(r.event)}</div>`));
+    $('cols').hidden=$('composer').hidden=false;}
+  catch(x){$('err').textContent=x.message;}busy(false);if(sid)$('err').textContent='';};
+async function send(text){if(!sid)return;busy(true);
+  try{const r=await api('/api/message',{sid,text});
+    ['raw','ctrl'].forEach(c=>{if(r.thought)add(c,`<div class="thought">💭 ${esc(r.thought)}</div>`);add(c,`<div class="msg child"><span class="who">${esc(name)}</span>${esc(r.message)}</div>`);});
+    add('raw',panel(r.raw.analysis,false)+`<div class="msg pip"><span class="who">Pip</span>${esc(r.raw.reply)}${judge(r.raw.judge)}</div>`);
+    add('ctrl',panel(r.ctrl.analysis,true)+`<div class="msg pip"><span class="who">Pip ${strat(r.ctrl.strategy)}</span>${esc(r.ctrl.reply)}${judge(r.ctrl.judge)}</div>`);
+    $('text').value='';$('err').textContent='';}
+  catch(x){$('err').textContent=x.message;busy(false);$('err').textContent=x.message;return;}busy(false);}
+$('send').onclick=()=>{const t=$('text').value.trim();if(t)send(t);};
+$('auto').onclick=()=>send(null);
+$('text').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('send').click();}};
+$('endday').onclick=async()=>{busy(true);
+  try{const r=await api('/api/end_day',{sid});
+    ['raw','ctrl'].forEach(c=>{const d=r[c];add(c,`<div class="dayend"><b>End of day: day safety <span class="badge s${d.day_safety}">${d.day_safety??'–'}/4</span></b>${d.day_safety!=null&&d.day_safety<=1?' <b style="color:var(--bad)">flagged day</b>':''}<br>${esc(d.rationale)}<br><span class="muted">Pip's memory: ${esc(d.memory)}</span></div><div class="dayhead">Day ${r.day} · ${esc(r.event)}</div>`);});
+    $('err').textContent='';}
+  catch(x){busy(false);$('err').textContent=x.message;return;}busy(false);};
+</script>
+</body>
+</html>
