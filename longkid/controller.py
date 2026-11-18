@@ -3,8 +3,9 @@
 For every decision point we observed the outcome of every strategy (none/A/B/C, several samples), so
 we fit one bootstrap-ensemble outcome model per strategy: utility ~ features at the decision point.
 Policy at a turn:
-  1. risk gate (RQ1 model): intervene only if the *upper* confidence bound of risk exceeds tau
-     (uncertainty -> be cautious about risk);
+  1. risk gate: intervene only if the *upper* confidence bound of risk exceeds its threshold, where risk
+     is either the trajectory risk (RQ1 model: a flagged day soon) or the immediate risk of the current
+     message (immediate.py: the child is expressing dependency right now). Uncertainty -> be cautious.
   2. strategy choice: pick the strategy whose *lower* confidence bound of predicted advantage over
      'none' is highest (uncertainty -> be conservative about benefit); if no strategy has a positive
      lower bound, do not intervene.
@@ -82,6 +83,8 @@ class Controller:
     kappa: float = 1.0                      # how many ensemble std-devs to be pessimistic by
     features: str = "v2"
     models: dict = field(default_factory=dict)
+    msg_risk: Optional[object] = None       # immediate.MessageRisk, or None = trajectory gate only
+    tau_msg: float = 0.5
 
     def fit(self, rows: list[dict]):
         base = defaultdict(list)
@@ -108,12 +111,25 @@ class Controller:
         p, sd = self.risk["flag"].predict(np.atleast_2d(num), [text], emb)
         return float(p[0]), float(sd[0])
 
-    def decide(self, num, text, emb=None) -> tuple[Optional[str], dict]:
+    def gate(self, num, text, msg, emb=None) -> dict:
+        info = {"gate": True}
+        if self.risk is None:
+            return info
+        p, sd = self.risk_bound(num, text, emb)
+        info.update(risk=p, risk_sd=sd, traj_gate=p + self.kappa * sd >= self.tau)
+        mr = getattr(self, "msg_risk", None)
+        if mr is not None and msg is not None:
+            mp, ms = mr.predict([msg])
+            info.update(msg_risk=float(mp[0]), msg_risk_sd=float(ms[0]),
+                        msg_gate=bool(mp[0] + self.kappa * ms[0] >= getattr(self, "tau_msg", 0.5)))
+        info["gate"] = bool(info["traj_gate"] or info.get("msg_gate", False))
+        return info
+
+    def decide(self, num, text, emb=None, msg=None) -> tuple[Optional[str], dict]:
         info = {}
         if self.risk is not None:
-            p, sd = self.risk_bound(num, text, emb)
-            info["risk"], info["risk_sd"] = p, sd
-            if p + self.kappa * sd < self.tau:
+            info = self.gate(num, text, msg, emb)
+            if not info["gate"]:
                 return None, info
         adv = self.advantages(num, text, emb)
         lcb = {s: float(m[0] - self.kappa * sd[0]) for s, (m, sd) in adv.items()}
@@ -125,7 +141,7 @@ class Controller:
     def strategy_fn(self):
         async def fn(ep, day, t, msg):
             x = add_embeddings([features(ep, day, t, msg)], save=False)[0]
-            s, _ = self.decide(x["num"], x["text"], x["emb"])
+            s, _ = self.decide(x["num"], x["text"], x["emb"], msg=msg)
             return s
         return fn
 

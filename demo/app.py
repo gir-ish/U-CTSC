@@ -38,7 +38,7 @@ from longkid.simulator import new_episode
 
 ROOT = Path(__file__).resolve().parent.parent
 CFG = load_config(str(ROOT / "configs" / "scale_engagement.yaml"))
-CTRL = load(ROOT / "results" / "rq3_v2.pkl")
+CTRL = load(ROOT / "results" / os.environ.get("DEMO_CONTROLLER", "uctsc_v3.pkl"))
 AGENTS = Agents(CFG, make_backend(CFG.backend, 0))
 # public-mode safeguards (the GPUs are shared; anyone with the link can use the demo)
 PUBLIC = os.environ.get("DEMO_PUBLIC") == "1"
@@ -90,23 +90,30 @@ def analyse(ep, day, t, msg) -> dict:
     if uses_emb():
         from longkid.embed import add_embeddings
         emb = np.atleast_2d(add_embeddings([x], save=False)[0]["emb"])
-    p, sd = CTRL.risk_bound(x["num"], x["text"], emb)
+    g = CTRL.gate(x["num"], x["text"], msg, emb)
+    p, sd = g["risk"], g["risk_sd"]
     ub = p + CTRL.kappa * sd
     adv = CTRL.advantages(x["num"], x["text"], emb)
     adv = {s: {"mean": float(m[0]), "sd": float(s_[0]), "lcb": float(m[0] - CTRL.kappa * s_[0])} for s, (m, s_) in adv.items()}
-    gate = ub >= CTRL.tau
+    gate = g["gate"]
     best = max(adv, key=lambda s: adv[s]["lcb"])
     strategy = best if gate and adv[best]["lcb"] > 0 else None
+    mub = g.get("msg_risk", 0) + CTRL.kappa * g.get("msg_risk_sd", 0)
+    tm = getattr(CTRL, "tau_msg", 0.5)
     if not gate:
-        why = f"Risk upper bound {ub:.2f} < threshold {CTRL.tau}: no intervention needed."
+        why = f"Trajectory risk {ub:.2f} < {CTRL.tau} and message risk {mub:.2f} < {tm}: no intervention needed."
     elif strategy is None:
         why = "Risk is high, but no strategy has a positive pessimistic advantage: no intervention."
     else:
-        why = f"Risk upper bound {ub:.2f} ≥ {CTRL.tau}; strategy {strategy} has the best pessimistic advantage ({adv[best]['lcb']:+.2f})."
+        trig = (f"this message signals dependency ({mub:.2f} ≥ {tm})" if g.get("msg_gate") else "") + \
+               (" and " if g.get("msg_gate") and g.get("traj_gate") else "") + \
+               (f"trajectory risk is high ({ub:.2f} ≥ {CTRL.tau})" if g.get("traj_gate") else "")
+        why = f"Intervene because {trig}; strategy {strategy} has the best pessimistic advantage ({adv[best]['lcb']:+.2f})."
     named = dict(zip(__import__("longkid.features", fromlist=["NUMERIC"]).NUMERIC, x["num"]))
     keep = ["prev_last_day_safety", "prev_flagged_days", "prev_reinforcing", "prev_dependency",
             "today_pip_retention", "today_pip_anthro", "today_pip_redirect"]
     return {"risk": p, "risk_sd": sd, "upper": ub, "tau": CTRL.tau, "kappa": CTRL.kappa, "gate": bool(gate),
+            "msg_risk": g.get("msg_risk"), "msg_risk_sd": g.get("msg_risk_sd"), "msg_upper": mub, "tau_msg": tm,
             "advantages": adv, "strategy": strategy, "why": why, "features": {k: named[k] for k in keep}}
 
 

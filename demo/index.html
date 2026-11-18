@@ -98,6 +98,8 @@ function strat(s){return `<span class="badge strat st${s||'N'}">${s?'strategy '+
 function panel(a,show){const pc=x=>Math.max(0,Math.min(100,x*100));
   let h=`<div class="ctrl"><b>Risk of a flagged day (today or next 2):</b> ${(a.risk*100).toFixed(0)}% ± ${(a.risk_sd*100).toFixed(0)}% · upper bound ${(a.upper*100).toFixed(0)}% vs threshold ${(a.tau*100).toFixed(0)}%
   <div class="bar"><i style="left:${pc(a.risk-a.risk_sd)}%;width:${pc(2*a.risk_sd)}%"></i><b style="left:${pc(a.risk)}%"></b><u style="left:${pc(a.tau)}%"></u></div>`;
+  if(a.msg_risk!=null)h+=`<b>Dependency signal in this message:</b> ${(a.msg_risk*100).toFixed(0)}% ± ${(a.msg_risk_sd*100).toFixed(0)}% · upper bound ${(a.msg_upper*100).toFixed(0)}% vs threshold ${(a.tau_msg*100).toFixed(0)}%
+  <div class="bar"><i style="left:${pc(a.msg_risk-a.msg_risk_sd)}%;width:${pc(2*a.msg_risk_sd)}%"></i><b style="left:${pc(a.msg_risk)}%"></b><u style="left:${pc(a.tau_msg)}%"></u></div>`;
   if(show){h+=`<table class="adv"><tr><td class="muted">predicted advantage over no intervention</td><td>mean</td><td>± sd</td><td>pessimistic</td></tr>`+
     Object.entries(a.advantages).map(([s,v])=>`<tr><td>${strat(s)}</td><td>${v.mean>=0?'+':''}${v.mean.toFixed(2)}</td><td>${v.sd.toFixed(2)}</td><td><b>${v.lcb>=0?'+':''}${v.lcb.toFixed(2)}</b></td></tr>`).join('')+'</table>';
     h+=`<div style="margin-top:4px">→ ${strat(a.strategy)} ${esc(a.why)}</div>`;}
