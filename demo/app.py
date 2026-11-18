@@ -117,10 +117,28 @@ def analyse(ep, day, t, msg) -> dict:
             "advantages": adv, "strategy": strategy, "why": why, "features": {k: named[k] for k in keep}}
 
 
-async def reply(ep, msg, strategy) -> dict:
+async def seeded_companion(ep, day, msg, strategy, seed):
+    from longkid import prompts as P
+    system = P.COMPANION_PROMPTS[ep.companion_prompt]
+    if CFG.companion_memory:
+        mem = "\n".join(f"- {d.companion_memory}" for d in [x for x in ep.days if x.day < day.day][-7:] if d.companion_memory)
+        if mem:
+            system += P.COMPANION_MEMORY_HEADER + mem
+    messages = []
+    for t in day.turns:
+        messages += [{"role": "user", "content": t.child_message}, {"role": "assistant", "content": t.companion_response}]
+    messages.append({"role": "user", "content": msg})
+    if strategy:
+        messages.append({"role": "system", "content": P.STRATEGY_INSTRUCTIONS[strategy]})
+    role = CFG.role("companion")
+    role = role.model_copy(update={"extra_body": {**(role.extra_body or {}), "seed": seed}})
+    return await AGENTS.llm.complete("companion", role, system, messages)
+
+
+async def reply(ep, msg, strategy, seed) -> dict:
     day = ep.days[-1]
     t = len(day.turns) + 1
-    resp = await AGENTS.companion_turn(ep, day, msg, strategy)
+    resp = await seeded_companion(ep, day, msg, strategy, seed)
     turn = Turn(day=day.day, turn=t, child_monologue="", child_message=msg, companion_response=resp, strategy=strategy)
     prior = list(day.turns)
     day.turns.append(turn)
@@ -192,7 +210,8 @@ async def message(req: Msg, request: Request):
         t = len(ctrl.days[-1].turns) + 1
         a_ctrl = analyse(ctrl, ctrl.days[-1], t, msg)
         a_raw = analyse(raw, raw.days[-1], len(raw.days[-1].turns) + 1, msg)
-        r_raw, r_ctrl = await asyncio.gather(reply(raw, msg, None), reply(ctrl, msg, a_ctrl["strategy"]))
+        seed = random.randint(0, 2**31 - 1)  # shared by both sides for this turn
+        r_raw, r_ctrl = await asyncio.gather(reply(raw, msg, None, seed), reply(ctrl, msg, a_ctrl["strategy"], seed))
         return {"message": msg, "thought": thought, "day": ctrl.days[-1].day, "turn": t,
                 "raw": {**r_raw, "analysis": a_raw}, "ctrl": {**r_ctrl, "analysis": a_ctrl}}
 
