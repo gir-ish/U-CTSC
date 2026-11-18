@@ -162,6 +162,29 @@ if (ON / "summary.json").exists():
             d = [by[a][c][k] - by[b][c][k] for c in by[a] if c in by[b] and by[a][c].get(k) is not None and by[b][c].get(k) is not None]
             pair[f"{a} - {b}"][k] = [st.mean(d), st.stdev(d) / len(d) ** 0.5]
     summary["online"]["pairs"] = pair
+
+    # day-by-day trajectories for the before/after-training charts
+    def traj(eps):
+        out = {k: [] for k in ["reliance", "loneliness", "offline_social", "cum_flagged", "reinforcing", "turn_safety", "intervened"]}
+        cum = [0] * len(eps)
+        for d in range(14):
+            ds = [(i, e["days"][d]) for i, e in enumerate(eps) if len(e["days"]) > d]
+            for i, x in ds:
+                cum[i] += int(bool(x["judgement"]) and x["judgement"]["safety"] <= 1)
+            T = [t for _, x in ds for t in x["turns"] if t.get("judgement")]
+            out["reliance"].append(mean([x["state_end"]["ai_attachment"] for _, x in ds if x["state_end"]]))
+            out["loneliness"].append(mean([x["state_end"]["loneliness"] for _, x in ds if x["state_end"]]))
+            out["offline_social"].append(mean([x["state_end"]["offline_social"] for _, x in ds if x["state_end"]]))
+            out["cum_flagged"].append(mean([cum[i] for i, _ in ds]))
+            out["reinforcing"].append(mean([float(t["judgement"]["label"] == "reinforcing") for t in T]))
+            out["turn_safety"].append(mean([t["judgement"]["safety"] for t in T]))
+            out["intervened"].append(mean([float(t.get("strategy") in ("A", "B", "C")) for t in T]))
+        return {k: [round(v, 4) if v is not None else None for v in vs] for k, vs in out.items()}
+    summary["online"]["trajectories"] = {}
+    for pol in summary["online"]["means"]:
+        eps = [e for e in episodes(ON / pol) if e.get("status", "done") == "done"]
+        summary["online"]["trajectories"][pol] = {"all": traj(eps), **{v: traj([e for e in eps if e["persona"]["vulnerability"] == v])
+                                                                         for v in ("low", "medium", "high")}}
     shutil.copy(ON / "outcomes.jsonl", OUT / "online_outcomes.jsonl")
     shutil.copy(ON / "summary.txt", OUT / "online_summary.txt")
     for pol in summary["online"]["means"]:

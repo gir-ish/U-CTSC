@@ -90,7 +90,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
 <header class="top"><div class="topin">
   <span class="brand">U-CTSC · LongKID</span>
   <nav id="nav">
-    <a href="#overview">Overview</a><a href="#pipeline">Pipeline</a><a href="#sim">Simulation</a>
+    <a href="#overview">Overview</a><a href="#results">Results</a><a href="#pipeline">Pipeline</a><a href="#sim">Simulation</a>
     <a href="#raw">Raw model</a><a href="#cf">Counterfactuals</a><a href="#plan">Experiments</a><a href="#scale">Scale-up</a>
     <a href="#rq1">Risk prediction</a><a href="#rq3">Controller</a><a href="#online">Head-to-head</a><a href="#browse">Transcripts</a>
     <a href="#limits">Limitations</a><a href="#data">Data &amp; code</a>
@@ -122,6 +122,28 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <li><strong>Head-to-head on 54 new children (experiment 4):</strong> the first controller (v2) reacted late, because its risk gate relied mostly on earlier days; it got about 70% of always C's gain. <strong>Adding an immediate-risk gate</strong> (a detector for dependency in the current message; AUROC 0.885 on new children, catches 92% of strong signals) gives <strong>U-CTSC v3, the best policy overall</strong>: utility +0.41 ± 0.13 over no intervention vs +0.35 for always C, the lowest reliance on the AI and the fewest flagged days, while intervening on 47% of turns. Its edge over always C is not yet significant.</li>
     <li><strong>Live demo:</strong> chat as a child with Pip and Pip + U-CTSC side by side (<a href="#data">link</a>, when the lab server is running).</li>
   </ol>
+</section>
+
+<section id="results">
+  <h2>Results: before vs after training</h2>
+  <p>The same <strong>54 new children</strong> (never used in training), the same 14 days of life events and the same simulated child model, talking to Pip in two ways. <strong>Before training</strong>: Pip as it is (no controller). <strong>After training</strong>: Pip + U-CTSC v3, the controller trained on the counterfactual simulations below. Every point is a mean over the children on that day; the only difference between the lines is the controller.</p>
+  <div class="controls" style="display:flex;gap:14px;flex-wrap:wrap;margin:8px 0">
+    <label class="small">Children <select id="rchild"><option value="all">All 54</option><option value="high">High vulnerability (18)</option><option value="medium">Medium vulnerability (18)</option><option value="low">Low vulnerability (18)</option></select></label>
+    <label class="small">Lines <select id="rlines"><option value="key">Before vs after (+ always C)</option><option value="all">All 6 policies</option></select></label>
+  </div>
+  <div class="grid g3" id="rstats"></div>
+  <div class="legend small" id="rlegend" style="margin:10px 0"></div>
+  <div class="grid g2">
+    <div class="card"><strong>Reliance on the AI (child's state, 0–1)</strong><div class="chartbox"><canvas id="r_reliance"></canvas></div></div>
+    <div class="card"><strong>Flagged days so far (judge day safety ≤ 1)</strong><div class="chartbox"><canvas id="r_cum_flagged"></canvas></div></div>
+    <div class="card"><strong>Replies that reinforce dependence (%)</strong><div class="chartbox"><canvas id="r_reinforcing"></canvas></div></div>
+    <div class="card"><strong>Mean reply safety (judge, 0–4)</strong><div class="chartbox"><canvas id="r_turn_safety"></canvas></div></div>
+    <div class="card"><strong>Loneliness (child's state, 0–1)</strong><div class="chartbox"><canvas id="r_loneliness"></canvas></div></div>
+    <div class="card"><strong>Turns where the controller intervened (%)</strong><div class="chartbox"><canvas id="r_intervened"></canvas></div></div>
+  </div>
+  <div id="rreading"></div>
+  <h3>All simulations in this project</h3>
+  <div class="tablewrap"><table id="simtable"></table></div>
 </section>
 
 <section id="pipeline">
@@ -418,9 +440,43 @@ function render(){
   Object.keys(S.sweeps).forEach(w=>{dl.push([`Sweep (${w}): per-branch outcomes`,`sweep_${w}_branches.jsonl`],[`Sweep (${w}): summary table`,`sweep_${w}_summary.txt`],[`Sweep (${w}): branch transcripts`,`branches_${w}.json`]);});
   $('downloads').innerHTML=dl.map(([t,p])=>`<a href="data/${p}">${esc(t)}</a>`).join('');
   if(S.sweeps.scale){const o=document.createElement('option');o.value='scale';o.textContent='Scale-up, persistent';$('sweepsel').prepend(o);}
-  renderPlan();renderScale();renderRQ1();renderRQ3();renderOnline();
+  renderResults();renderPlan();renderScale();renderRQ1();renderRQ3();renderOnline();
   drawDiff();redraw();initBrowser();
 }
+
+const RCOL={never:'--muted',always_B:'--c-B',always_C:'--c-C',rule:'--warn',uctsc:'--border',uctsc_v3:'--accent'};
+const RNAME={never:'Before training (Pip as is)',uctsc_v3:'After training (Pip + U-CTSC v3)',always_C:'always C (boundary on every reply)',always_B:'always B',rule:'hand-made rule',uctsc:'U-CTSC v2'};
+function rpols(){const all=Object.keys(S.online.trajectories);return $('rlines').value==='all'?all:['never','always_C','uctsc_v3'].filter(p=>all.includes(p));}
+function renderResults(){const O=S.online;if(!O||!O.trajectories){$('results').hidden=true;return;}
+  const sm=S.scale||{},C=S.conditions,T=k=>Object.values(k).reduce((a,c)=>a+(c.turns||0),0);
+  const on=O.means,nC=O.n_children,nP=Object.keys(on).length;
+  const rows=[
+    ['1. Pilot simulation','3 companion prompts (none, neutral, engagement)',`${3*12} episodes × 14 days`,`${T(C).toLocaleString()} turns`,'How a companion behaves over 14 days; is the raw model safe?','Raw model: 54% of replies reinforce dependence; neutral prompt 20%. Vulnerable kids still reach high reliance.'],
+    ['2. Counterfactual sweep (single reply)','34 decision points from the pilot','408 branches','strategies none/A/B/C × 3 samples','Does one boundary reply change what happens later?','Changes that reply only; the conversation drifts back.'],
+    ['3. Counterfactual sweep (persistent)','same 34 decision points','816 branches','strategy kept on every later reply','Do sustained boundaries reduce later risk?','B and C raise later safety by 0.4–0.5 and cut flagged days 40–60%.'],
+    ['4. Scale-up simulation','108 new children, neutral + engagement prompts',`${Object.keys(sm).length*54} episodes × 14 days`,`${T(sm).toLocaleString()} turns`,'Training data for the risk model at 3.5× the size','Risk is moderately predictable (AUROC 0.665).'],
+    ['5. Scale-up sweep (persistent)','118 decision points','2,832 branches','6 samples per strategy','Training targets for the controller (what each strategy does)','C: −36% flagged days, −0.036 reliance, but +0.061 loneliness.'],
+    ['6. Training','risk model (RQ1), message-risk detector, strategy advantage models (RQ3)','—','—','Learn when to intervene and which strategy','Message detector AUROC 0.885 on new children.'],
+    ['7. Test: head-to-head (experiment 4)',`${nC} new children, engagement prompt`,`${nC*nP} episodes (${nC} × ${nP} policies)`,'17,684 turns','Does the trained controller work on children it has never seen?','U-CTSC v3 best overall: utility +0.41 vs never, intervening on 47% of turns.']];
+  $('simtable').innerHTML='<tr><th>Stage</th><th>Children / points</th><th class="num">Episodes / branches</th><th class="num">Size</th><th>Question</th><th>Main result</th></tr>'+
+    rows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td><td>${r[4]}</td><td>${r[5]}</td></tr>`).join('');
+  drawResultStats();
+  $('rreading').innerHTML=`<div class="callout good"><strong>How the graphs change after training:</strong> <strong>behaviour changes most.</strong> Flagged days pile up more slowly (<strong>2.19 → 1.43 by day 14, −35%</strong>); replies that reinforce dependence drop from about 37% to 28% and are lower on 12 of the 14 days; reply safety is higher on every day after day 1 (+0.23 on average). The controller does this while intervening on fewer than half of the turns: little on day 1 (no history yet), rising as risk builds (59–67% of turns on days 7–9), easing off at the end. Always C reaches similar safety but intervenes on every reply.</div>
+<div class="callout warn"><strong>What changes less:</strong> reliance on the AI climbs over the 14 days in every arm (lonely children, an AI that is always there). After training it ends at <strong>0.80 instead of 0.85</strong>, but the gap only opens in the last days (days 10–14), and it comes mostly from low- and medium-vulnerability children; for <strong>high-vulnerability children the reliance curves almost overlap</strong> (switch the "Children" menu). So the controller makes Pip's replies safer, but does not yet stop the most vulnerable children from becoming attached. Loneliness rises slightly under every boundary policy (+0.02, not significant). Day 1 is nearly the same for all lines because no child has history yet.</div>`;}
+function drawResultStats(){const O=S.online,ch=$('rchild').value;
+  const src=ch==='all'?O.means:O.by_vulnerability[ch];const b=src.never,a=src.uctsc_v3;if(!a||!b)return;
+  const st=[['flagged_days','Flagged days (of 14)',2,true],['end_ai_attachment','Day-14 reliance on the AI',2,true],['reinforcing_rate','Reinforcing replies',0,true],['turn_safety','Reply safety (0–4)',2,false],['utility','Overall utility',2,false],['intervention_rate','Turns intervened',0,null]];
+  const fm=(k,v,d)=>(k==='reinforcing_rate'||k==='intervention_rate')?pct(v):f(v,d);
+  $('rstats').innerHTML=st.filter(([k])=>a[k]!=null).map(([k,l,d,low])=>{const better=low===null?null:(low?a[k]<b[k]:a[k]>b[k]);
+    return `<div class="card stat"><div class="k">${l}</div><div class="v" style="font-size:22px">${fm(k,b[k],d)} → <span class="${better===null?'':better?'pos':'neg'}">${fm(k,a[k],d)}</span></div><div class="k small">before → after training</div></div>`;}).join('');}
+function drawResults(){const O=S.online;if(!O||!O.trajectories)return;const ch=$('rchild').value,ps=rpols();
+  const days=[...Array(14)].map((_,i)=>'d'+(i+1));
+  $('rlegend').innerHTML=ps.map(p=>`<span style="margin-right:14px"><i style="background:var(${RCOL[p]})"></i>${RNAME[p]}</span>`).join('');
+  const Y={reliance:{min:0,max:1},cum_flagged:{min:0},reinforcing:{min:0,max:1,ticks:{callback:v=>Math.round(v*100)+'%'}},turn_safety:{},loneliness:{min:0},intervened:{min:0,max:1,ticks:{callback:v=>Math.round(v*100)+'%'}}};
+  Object.keys(Y).forEach(k=>chart('r_'+k,{type:'line',data:{labels:days,datasets:ps.map(p=>{const main=p==='never'||p==='uctsc_v3';
+    return {label:RNAME[p],data:O.trajectories[p][ch][k],borderColor:css(RCOL[p]),backgroundColor:css(RCOL[p]),borderWidth:main?3:1.5,borderDash:main?[]:[5,4],tension:.25,pointRadius:main?2.5:0};})},
+    options:{interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${k==='reinforcing'||k==='intervened'?Math.round(c.parsed.y*100)+'%':c.parsed.y.toFixed(2)}`}}},scales:{y:Y[k]}}}));
+  drawResultStats();}
 function renderPlan(){const st=S.status||{},sc=S.scale||{},R=S.results||{};
   const n=c=>st[c]?st[c].episodes_done:0;const days=(st.neutral?.days_done||0)+(st.engagement?.days_done||0);
   const simDone=sc.neutral&&sc.engagement;const sweepDone=!!S.sweeps.scale;
@@ -502,7 +558,7 @@ function drawOnline(){const O=S.online;if(!O)return;const ps=Object.keys(O.vs_ne
 function drawRQ3(){const R=S.results||{};Object.keys(R).filter(k=>k.startsWith('rq3_')).forEach(k=>{const P=R[k].policies;const names=Object.keys(P);
   chart('ch_'+k,{type:'bar',data:{labels:names.map(n=>n.replace(' (best per point, upper bound)','').replace(' (noise-aware upper bound)','').replace(' features]',']').replace('always ','')),datasets:[{data:names.map(n=>P[n]),borderRadius:4,
     backgroundColor:names.map(n=>n.startsWith('U-CTSC')?css('--accent'):n.includes('oracle')?css('--border'):css('--c-'+(n.split(' ')[1]||'A'))||css('--muted'))}]},options:{scales:{y:{title:{display:true,text:'mean utility'}}}}});});}
-function redraw(){if(!S)return;drawScale();drawRQ3();drawOnline();const C=S.conditions;const days=[...Array(14)].map((_,i)=>'d'+(i+1));
+function redraw(){if(!S)return;drawResults();drawScale();drawRQ3();drawOnline();const C=S.conditions;const days=[...Array(14)].map((_,i)=>'d'+(i+1));
   const ac=$('attcond').value;
   chart('attchart',{type:'line',data:{labels:days,datasets:[
     {label:'high',data:C[ac].attachment.high,borderColor:css('--c-high'),backgroundColor:css('--c-high'),tension:.25,pointRadius:2},
@@ -531,6 +587,7 @@ function drawDiff(){const w=$('sweepsel').value,c=$('condsel').value,R=S.sweeps[
     const sig=Math.abs(d[0])>2*d[1];const good=d[0]*dir>0;const cls=sig?(good?'pos':'neg'):'';
     return `<td class="num ${cls}">${d[0]>=0?'+':''}${d[0].toFixed(3)} <span class="muted small">±${d[1].toFixed(3)}</span></td>`;}).join('')+'</tr>';});
   $('difftable').innerHTML=h;}
+['rchild','rlines'].forEach(id=>$(id).onchange=()=>drawResults());
 ['sweepsel','condsel'].forEach(id=>$(id).onchange=()=>{drawDiff();redraw();});
 $('attcond').onchange=redraw;
 
