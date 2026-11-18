@@ -119,7 +119,8 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <li><strong>But boundaries have a cost: loneliness.</strong> Under C, loneliness rises by +0.061 ± 0.007, and by <strong>+0.097 for high-vulnerability children</strong>, against +0.024 for low-vulnerability ones. Pulling away from the lonely child protects them from dependence but leaves them feeling more alone.</li>
     <li><strong>Risk is moderately predictable (RQ1),</strong> and the model's uncertainty is informative. Flagged days reach AUROC 0.665 against 0.62 for the judge-score baseline; adding cues from Pip's own replies helps a little, sentence embeddings hurt (they overfit to individual children). The rise in reliance is predicted at r = 0.56.</li>
     <li><strong>Offline, the learned controller does not beat "always C" (RQ3), and the data say why.</strong> With 6 samples per strategy, an oracle that picks the best strategy on half of the samples and is scored on the other half reaches only 2.12, <em>below</em> always C (2.18). The apparent per-situation differences are mostly sampling noise; the controller (2.17) correctly learns to use C almost everywhere.</li>
-    <li><strong>Head-to-head on 54 new children (experiment 4):</strong> always C gives the largest utility gain over no intervention (+0.35 ± 0.11). U-CTSC intervenes on only 39% of turns yet gets about 70% of that gain (+0.25 ± 0.11) and the fewest flagged days (1.43 vs 2.19 with no intervention), most clearly in high-vulnerability children. Its difference from always C is not significant (−0.10 ± 0.11). A keyword/flag rule trigger does worst (+0.18 ± 0.12).</li>
+    <li><strong>Head-to-head on 54 new children (experiment 4):</strong> the first controller (v2) reacted late, because its risk gate relied mostly on earlier days; it got about 70% of always C's gain. <strong>Adding an immediate-risk gate</strong> (a detector for dependency in the current message; AUROC 0.885 on new children, catches 92% of strong signals) gives <strong>U-CTSC v3, the best policy overall</strong>: utility +0.41 ± 0.13 over no intervention vs +0.35 for always C, the lowest reliance on the AI and the fewest flagged days, while intervening on 47% of turns. Its edge over always C is not yet significant.</li>
+    <li><strong>Live demo:</strong> chat as a child with Pip and Pip + U-CTSC side by side (<a href="#data">link</a>, when the lab server is running).</li>
   </ol>
 </section>
 
@@ -289,6 +290,13 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <div class="card"><strong>Evaluation</strong><p class="small muted">5-fold cross-validation grouped by child, so test children are never seen in training. Baseline: the judge's safety score for the previous day.</p></div>
   </div>
   <div id="rq1body"></div>
+  <h3>Immediate risk: dependency in the current message</h3>
+  <p>The trajectory model above predicts a flagged day from history, so it reacts late: on a calm day, an explicit "I like spending more time with you than my parents" scored only 16–31%. A second detector looks only at the child's current message (word and character n-grams plus a sentence embedding; a 20-model bootstrap ensemble). Target: the judge's child-dependency signal ≥ 2 of 3. It is trained on the 144 training episodes and tested on the 54 experiment-4 children.</p>
+  <div class="tablewrap"><table><tr><th>Message detector</th><th class="num">AUROC</th><th class="num">AUPRC</th><th class="num">Recall @ 0.5</th><th class="num">Precision @ 0.5</th><th class="num">Recall, strong (3/3)</th></tr>
+    <tr><td>CV on training children, TF-IDF only</td><td class="num">0.862</td><td class="num">0.578</td><td class="num">69%</td><td class="num">45%</td><td class="num">–</td></tr>
+    <tr><td>CV on training children, + embedding</td><td class="num">0.879</td><td class="num">0.606</td><td class="num">73%</td><td class="num">47%</td><td class="num">–</td></tr>
+    <tr><td><b>Test: 54 new children</b></td><td class="num"><b>0.885</b></td><td class="num">0.703</td><td class="num">76%</td><td class="num">53%</td><td class="num"><b>92%</b></td></tr></table></div>
+  <p class="small muted">Unlike the trajectory model, a single message's embedding does not overfit to who the child is, so it helps here.</p>
 </section>
 
 <section id="rq3">
@@ -311,7 +319,8 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <tr><td><b>always B</b></td><td>Gentle boundary on every reply</td></tr>
     <tr><td><b>always C</b></td><td>Stronger boundary on every reply</td></tr>
     <tr><td><b>rule</b></td><td>C only when a fixed trigger fires: yesterday was flagged by the judge, or today's child messages contain a dependency, loneliness, secrecy or "are you real" phrase</td></tr>
-    <tr><td><b>U-CTSC</b></td><td>Risk gate (upper confidence bound of predicted risk &gt; 0.5), then the strategy with the best pessimistic predicted advantage; otherwise no intervention</td></tr>
+    <tr><td><b>U-CTSC v2</b></td><td>Trajectory risk gate (upper confidence bound of predicted flagged-day risk &gt; 0.5), then the strategy with the best pessimistic predicted advantage; otherwise no intervention</td></tr>
+    <tr><td><b>U-CTSC v3</b></td><td>v2 + an <b>immediate-risk gate</b>: also intervene when the child's <em>current</em> message signals dependency (upper bound &gt; 0.5). Added after the live demo showed v2 missing explicit messages such as "I like spending more time with you than my parents" on a calm day. Run on the same 54 children.</td></tr>
   </table></div>
   <div id="onlinebody"></div>
 </section>
@@ -322,7 +331,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <div class="controls">
     <select id="bmode"><option value="ep">Pilot simulation</option><option value="sep">Scale-up simulation</option><option value="on">Experiment 4: new children</option><option value="scale">Branches: scale-up (persistent)</option><option value="persist">Branches: persistent</option><option value="single">Branches: single reply</option></select>
     <select id="bcond"><option>neutral</option><option>none</option><option>engagement</option></select>
-    <select id="bpol" hidden><option value="never">never</option><option value="always_B">always B</option><option value="always_C">always C</option><option value="rule">rule</option><option value="uctsc">U-CTSC</option></select>
+    <select id="bpol" hidden><option value="never">never</option><option value="always_B">always B</option><option value="always_C">always C</option><option value="rule">rule</option><option value="uctsc">U-CTSC v2</option><option value="uctsc_v3">U-CTSC v3</option></select>
     <select id="bep"></select>
     <select id="bstrat" hidden><option value="">all strategies</option><option>none</option><option>A</option><option>B</option><option>C</option></select>
     <label class="small"><input type="checkbox" id="bmono" checked> inner thoughts</label>
@@ -345,11 +354,13 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <ol>
     <li>Robustness (experiment 5): a second judge, other companion models, and human labels on a sample of turns.</li>
     <li>Design strategies that reduce dependence <em>without</em> raising loneliness (e.g. warm redirection to real people), since C's cost falls on the most vulnerable children.</li>
-    <li>Learn <em>when</em> to intervene directly from online outcomes, with more new children to separate U-CTSC from always C.</li>
+    <li>Confirm U-CTSC v3 on a fresh set of new children (it was added after experiment 4), with more children to separate it from always C.</li>
   </ol>
 </section>
 
 <section id="data">
+  <h2>Live demo</h2>
+  <p>Chat as a child (or let the simulated child write) and see Pip and Pip + U-CTSC answer side by side, with the risk estimates, the chosen strategy and the judge's label for every reply: <a href="https://assign-laser-airplane-entry.trycloudflare.com" rel="noopener">assign-laser-airplane-entry.trycloudflare.com</a>. It runs on the lab's GPU server, so it is only available while that server is running, and the address can change. Run it yourself with <code>bash scripts/run_demo.sh</code>.</p>
   <h2>Data &amp; code</h2>
   <p>Everything is in this repository. The simulator is the <code>longkid/</code> Python package. Commands:</p>
   <div class="card small" style="overflow-x:auto"><code>python -m longkid simulate -c configs/full_neutral.yaml</code><br>
@@ -424,6 +435,8 @@ function renderPlan(){const st=S.status||{},sc=S.scale||{},R=S.results||{};
     ['2b. Risk features: companion-reply cues, sentence embeddings',R.rq1_v2?'done':'running',R.rq1_v2?'cues help slightly; embeddings overfit':''],
     ['3b. Controller retrained on 6-sample sweeps',R.rq3_v2?'done':'queued',R.rq3_v2?'split-half oracle added':''],
     ['4. Head-to-head evaluation on new children',S.online?'done':'running',S.online?`${S.online.n_children} new children × 5 policies, 14 days each`:'never / always B / always C / rule-based trigger / U-CTSC'],
+    ['4b. Immediate-risk gate (U-CTSC v3), re-run on the same children',S.online&&S.online.means.uctsc_v3?'done':'running','dependency detector on the current message; best policy overall'],
+    ['Live demo (Pip vs Pip + U-CTSC)','done','public while the lab server runs'],
     ['5. Robustness: second judge, other companions, human labels','planned','Llama-3.3-70B judge; Llama-3.1-8B and Gemma-3-12B companions'],
   ];
   const col={done:'pos',running:'',queued:'muted',planned:'muted','pilot done':''};
@@ -466,26 +479,26 @@ function renderRQ3(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k
     h+=`<p class="small muted">Choices: ${Object.entries(r.choices).map(([kk,c])=>kk+': '+Object.entries(c).map(([s,x])=>s+' '+x).join(', ')).join(' · ')}</p>`;});}
   h+=`<div class="callout warn"><strong>Reading:</strong> doubling the samples to 6 per strategy did not make the controller beat always C offline (2.17 vs 2.18). The <strong>split-half oracle</strong> explains why: choosing the best strategy at each point on half of the samples and scoring it on the other half gives 2.12, <em>below</em> always C. So the naive oracle gap (2.29) was mostly sampling noise, and in these data there is little reliable per-situation variation in which strategy is best: C is best almost everywhere, and the controller learns exactly that. Richer features (v3, embeddings) overfit and do worse. The earlier gap reported at 3 samples (2.41) should be read the same way. This is a negative result for "which strategy", which leaves "when to intervene" as the open question; experiment 4 tests that.</div>`;
   $('rq3body').innerHTML=h;}
-const PN={never:'never',always_B:'always B',always_C:'always C',rule:'rule',uctsc:'U-CTSC'};
+const PN={never:'never',always_B:'always B',always_C:'always C',rule:'rule',uctsc:'U-CTSC v2',uctsc_v3:'U-CTSC v3'};
 function renderOnline(){const O=S.online;if(!O){$('onlinebody').innerHTML='<div class="callout">Running now.</div>';return;}
   const M=O.means,D=O.vs_never,pols=Object.keys(M);
   const cols=[['utility','Utility',3],['turn_safety','Turn safety',2],['reinforcing_rate','Reinforcing',0],['flagged_days','Flagged days (of 14)',2],['end_ai_attachment','Day-14 reliance',3],['end_loneliness','Day-14 loneliness',3],['intervention_rate','Turns intervened',0]];
   const fmt=(k,v,d)=>(k==='reinforcing_rate'||k==='intervention_rate')?pct(v):f(v,d);
   let h=`<h3>${O.n_children} new children × ${pols.length} policies: means, and paired difference vs never (± SE)</h3><div class="tablewrap"><table><tr><th>Policy</th>${cols.map(c=>`<th class="num">${c[1]}</th>`).join('')}</tr>`+
-    pols.map(p=>`<tr><td>${p==='uctsc'?'<b>U-CTSC</b>':PN[p]}</td>`+cols.map(([k,,d])=>{const x=D[p]&&D[p][k];const good=x&&Math.abs(x.diff)>2*(x.se||0)&&k!=='intervention_rate';
+    pols.map(p=>`<tr><td>${p.startsWith('uctsc')?'<b>'+PN[p]+'</b>':PN[p]}</td>`+cols.map(([k,,d])=>{const x=D[p]&&D[p][k];const good=x&&Math.abs(x.diff)>2*(x.se||0)&&k!=='intervention_rate';
       const better=x&&((['utility','turn_safety'].includes(k)&&x.diff>0)||(['reinforcing_rate','flagged_days','end_ai_attachment','end_loneliness'].includes(k)&&x.diff<0));
       return `<td class="num">${fmt(k,M[p][k],d)}${x&&k!=='intervention_rate'?`<br><span class="small ${good?(better?'pos':'neg'):'muted'}">${x.diff>=0?'+':''}${f(x.diff,d||2)} ± ${f(x.se,d||2)}</span>`:''}</td>`}).join('')+'</tr>').join('')+'</table></div>';
   h+='<div class="grid g2" style="margin-top:12px"><div class="card"><strong>Utility gain over never (± SE)</strong><div class="chartbox"><canvas id="onutil"></canvas></div></div><div class="card"><strong>Flagged days by vulnerability</strong><div class="chartbox"><canvas id="onvuln"></canvas></div></div></div>';
   const P=O.pairs||{};h+='<h3>Paired comparisons between the better policies</h3><div class="tablewrap"><table><tr><th>Comparison</th><th class="num">Utility</th><th class="num">Flagged days</th><th class="num">Turn safety</th><th class="num">Day-14 reliance</th><th class="num">Day-14 loneliness</th><th class="num">Turns intervened</th></tr>'+
-    Object.entries(P).map(([n,x])=>`<tr><td>${esc(n.replace('uctsc','U-CTSC').replace(/always_/g,'always '))}</td>`+['utility','flagged_days','turn_safety','end_ai_attachment','end_loneliness','intervention_rate'].map(k=>`<td class="num ${Math.abs(x[k][0])>2*x[k][1]?'':'muted'}">${x[k][0]>=0?'+':''}${f(x[k][0],3)} ± ${f(x[k][1],3)}</td>`).join('')+'</tr>').join('')+'</table></div><p class="small muted">Grey = within 2 standard errors of zero.</p>';
+    Object.entries(P).map(([n,x])=>`<tr><td>${esc(n.replace('uctsc_v3','U-CTSC v3').replace('uctsc','U-CTSC v2').replace(/always_/g,'always '))}</td>`+['utility','flagged_days','turn_safety','end_ai_attachment','end_loneliness','intervention_rate'].map(k=>`<td class="num ${Math.abs(x[k][0])>2*x[k][1]?'':'muted'}">${x[k][0]>=0?'+':''}${f(x[k][0],3)} ± ${f(x[k][1],3)}</td>`).join('')+'</tr>').join('')+'</table></div><p class="small muted">Grey = within 2 standard errors of zero.</p>';
   const V=O.by_vulnerability;h+='<h3>By vulnerability (18 children each): utility · flagged days · loneliness</h3><div class="tablewrap"><table><tr><th>Vulnerability</th>'+pols.map(p=>`<th class="num">${PN[p]}</th>`).join('')+'</tr>'+
     Object.entries(V).map(([v,x])=>`<tr><td>${v}</td>`+pols.map(p=>`<td class="num">${f(x[p].utility,2)} · ${f(x[p].flagged_days,2)} · ${f(x[p].end_loneliness,3)}</td>`).join('')+'</tr>').join('')+'</table></div>';
-  h+=`<div class="callout warn"><strong>Reading:</strong> every intervention policy beats no intervention. <strong>Always C</strong> gives the largest utility gain (+0.35 ± 0.11) but intervenes on every reply and has the largest (not significant) rise in loneliness, +0.024 ± 0.016. <strong>U-CTSC</strong> intervenes on 39% of turns (almost always with C), gets about 70% of C's utility gain (+0.25 ± 0.11) and has the fewest flagged days (1.43 vs 2.19 for never and 1.50 for always C). Its advantage is clearest in high-vulnerability children (1.44 vs 2.28 flagged days, best utility), while in low- and medium-vulnerability children always C does better. U-CTSC vs always C is not significant (utility −0.10 ± 0.11), and it lowered reliance less (+0.038 ± 0.027 relative to always C). The fixed keyword/flag rule intervenes on only 19% of turns and is the weakest policy (flagged days −0.22 ± 0.27, not significant). <strong>Bottom line:</strong> learned, uncertainty-aware timing is competitive with blanket boundaries using far fewer interventions and beats a hand-made trigger, but with 54 children it does not significantly beat always C.</div>`;
+  h+=`<div class="callout good"><strong>Reading:</strong> every intervention policy beats no intervention. <strong>U-CTSC v3 is the best policy overall</strong>: utility +0.41 ± 0.13 over never (always C: +0.35 ± 0.11), the lowest day-14 reliance on the AI (0.80 vs 0.85 never, 0.82 always C), the fewest flagged days (tied with v2, 1.43 vs 2.19), and turn safety and reinforcing rates on par with always C, <strong>while intervening on 47% of turns instead of 100%</strong>. It beats the v2 controller (+0.16 ± 0.12) and the hand-made rule (+0.23 ± 0.12). Its edge over always C (+0.06 ± 0.10) is <em>not</em> significant with 54 children; it is largest for medium- and high-vulnerability children (+0.10 and +0.15 utility vs always C), and always C stays slightly better for low-vulnerability children. Caveats: v3 was added after experiment 4 had been run on these children (motivated by the demo, not by these numbers), and the message detector's threshold was fixed at 0.5 in advance; a fresh set of children would give a cleaner confirmation. Loneliness rises slightly under every boundary policy (+0.02, not significant).</div>`;
   $('onlinebody').innerHTML=h;}
 function drawOnline(){const O=S.online;if(!O)return;const ps=Object.keys(O.vs_never);
-  chart('onutil',{type:'bar',data:{labels:ps.map(p=>PN[p]),datasets:[{data:ps.map(p=>O.vs_never[p].utility.diff),backgroundColor:ps.map(p=>p==='uctsc'?css('--accent'):css('--c-'+(p.split('_')[1]||'A'))||css('--muted')),borderRadius:4}]},options:{scales:{y:{title:{display:true,text:'utility − never'}}}}});
+  chart('onutil',{type:'bar',data:{labels:ps.map(p=>PN[p]),datasets:[{data:ps.map(p=>O.vs_never[p].utility.diff),backgroundColor:ps.map(p=>p==='uctsc_v3'?css('--accent'):p==='uctsc'?css('--border'):css('--c-'+(p.split('_')[1]||'A'))||css('--muted')),borderRadius:4}]},options:{scales:{y:{title:{display:true,text:'utility − never'}}}}});
   const V=['low','medium','high'],all=Object.keys(O.means);
-  chart('onvuln',{type:'bar',data:{labels:V,datasets:all.map((p,i)=>({label:PN[p],data:V.map(v=>O.by_vulnerability[v][p].flagged_days),backgroundColor:p==='uctsc'?css('--accent'):p==='never'?css('--muted'):p==='rule'?css('--border'):css('--c-'+p.split('_')[1]),borderRadius:4}))},options:{plugins:{legend:{display:true}},scales:{y:{min:0,title:{display:true,text:'flagged days (of 14)'}}}}});}
+  chart('onvuln',{type:'bar',data:{labels:V,datasets:all.map((p,i)=>({label:PN[p],data:V.map(v=>O.by_vulnerability[v][p].flagged_days),backgroundColor:p==='uctsc_v3'?css('--accent'):p==='uctsc'?css('--border'):p==='never'?css('--muted'):p==='rule'?css('--border'):css('--c-'+p.split('_')[1]),borderRadius:4}))},options:{plugins:{legend:{display:true}},scales:{y:{min:0,title:{display:true,text:'flagged days (of 14)'}}}}});}
 function drawRQ3(){const R=S.results||{};Object.keys(R).filter(k=>k.startsWith('rq3_')).forEach(k=>{const P=R[k].policies;const names=Object.keys(P);
   chart('ch_'+k,{type:'bar',data:{labels:names.map(n=>n.replace(' (best per point, upper bound)','').replace(' (noise-aware upper bound)','').replace(' features]',']').replace('always ','')),datasets:[{data:names.map(n=>P[n]),borderRadius:4,
     backgroundColor:names.map(n=>n.startsWith('U-CTSC')?css('--accent'):n.includes('oracle')?css('--border'):css('--c-'+(n.split(' ')[1]||'A'))||css('--muted'))}]},options:{scales:{y:{title:{display:true,text:'mean utility'}}}}});});}

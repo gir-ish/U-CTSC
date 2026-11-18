@@ -156,7 +156,7 @@ if (ON / "summary.json").exists():
     for r in rows:
         by[r["policy"]][r["persona"]] = r
     pair = {}
-    for a, b in [("uctsc", "always_C"), ("uctsc", "rule"), ("uctsc", "always_B"), ("always_C", "always_B")]:
+    for a, b in [("uctsc_v3", "always_C"), ("uctsc_v3", "uctsc"), ("uctsc_v3", "rule"), ("uctsc", "always_C"), ("always_C", "always_B")]:
         pair[f"{a} - {b}"] = {}
         for k in ["utility", "flagged_days", "turn_safety", "end_ai_attachment", "end_loneliness", "intervention_rate"]:
             d = [by[a][c][k] - by[b][c][k] for c in by[a] if c in by[b] and by[a][c].get(k) is not None and by[b][c].get(k) is not None]

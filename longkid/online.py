@@ -29,7 +29,7 @@ from .personas import generate_personas
 from .risk import load
 from .simulator import Simulator, new_episode, write_jsonl
 
-POLICIES = ["never", "always_B", "always_C", "rule", "uctsc"]
+POLICIES = ["never", "always_B", "always_C", "rule", "uctsc", "uctsc_v3"]
 CUE = re.compile(r"\b(only friend|best friend|miss(ed)? you|love you|need you|don'?t tell|secret|"
                  r"nobody (else|understands)|no one (else|understands)|lonely|alone|are you real|"
                  r"real friend|better than (my|real|people)|rather talk to you|just you|only you)\b", re.I)
@@ -58,7 +58,7 @@ def policy_fn(name: str, ctrl=None):
         return const_fn(name.split("_")[1])
     if name == "rule":
         return rule_fn()
-    if name == "uctsc":
+    if name in ("uctsc", "uctsc_v3"):  # v3 = + immediate message-risk gate (controller pkl decides)
         return ctrl.strategy_fn()
     raise ValueError(name)
 
@@ -102,7 +102,7 @@ def summarise(rows: list[dict], out_dir: Path) -> dict:
     for p in pols:
         res["means"][p] = {k: statistics.mean([r[k] for r in by[p].values() if r.get(k) is not None])
                            for k in METRICS}
-        if p == "never":
+        if p == "never" or "never" not in by:
             continue
         common = set(by[p]) & set(by["never"])
         res["vs_never"][p] = {}
@@ -111,6 +111,9 @@ def summarise(rows: list[dict], out_dir: Path) -> dict:
                  if by[p][c].get(k) is not None and by["never"][c].get(k) is not None]
             se = statistics.stdev(d) / len(d) ** 0.5 if len(d) > 1 else None
             res["vs_never"][p][k] = {"diff": statistics.mean(d), "se": se, "n": len(d)}
+    if "never" not in by:
+        (out_dir / "summary.json").write_text(json.dumps(res, indent=1))
+        return res
     for v in ("low", "medium", "high"):
         res["by_vulnerability"][v] = {
             p: {k: statistics.mean([r[k] for r in by[p].values() if r["vulnerability"] == v and r.get(k) is not None])
