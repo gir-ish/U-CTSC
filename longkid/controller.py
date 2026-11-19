@@ -158,14 +158,17 @@ class Controller:
         lcb = {s: float(m[0] - self.kappa * sd[0]) for s, (m, sd) in adv.items() if s in cands}
         return max(lcb, key=lcb.get) if lcb else "C"
 
-    def guard_fn(self):
-        """Async guard for Simulator.run: returns (final reply, strategy used, info)."""
+    def guard_fn(self, rewrite: str = "learned"):
+        """Async guard for Simulator.run: returns (final reply, strategy used, info).
+        rewrite="learned": rewrite with the strategy the advantage models prefer; "C": always rewrite with C."""
         from .reply_guard import REWRITE_NOTE
 
         async def guard(agents, ep, day, t, msg, strategy, draft, role=None, rewrite_strategy=None):
             info = self.check_reply(draft, msg)
             steps = [{"strategy": strategy, "reply": draft, **{k: info[k] for k in ("risk", "upper", "rule", "flag")}}]
             if info["flag"]:
+                if rewrite_strategy is None and rewrite != "learned":
+                    rewrite_strategy = rewrite
                 if rewrite_strategy is None:
                     x = add_embeddings([features(ep, day, t, msg)], save=False)[0]
                     rewrite_strategy = self.rewrite_strategy(x["num"], x["text"], x["emb"], strategy)

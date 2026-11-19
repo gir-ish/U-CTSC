@@ -81,7 +81,7 @@ footer{color:var(--muted);font-size:14px;border-top:1px solid var(--border);padd
   <span class="brand">U-CTSC in one page</span>
   <nav>
     <a href="#problem">Problem</a><a href="#approach">What we did</a><a href="#findings">Findings</a>
-    <a href="#solution">Solution</a><a href="#results">Results</a><a href="#limits">Limits</a><a href="index.html">Full results →</a>
+    <a href="#solution">Solution</a><a href="#results">Results</a><a href="#robust">Robustness</a><a href="#limits">Limits</a><a href="index.html">Full results →</a>
   </nav>
   <button id="theme" aria-label="Toggle theme">◐</button>
 </div></header>
@@ -233,22 +233,33 @@ footer{color:var(--muted);font-size:14px;border-top:1px solid var(--border);padd
   <div class="callout good"><strong>In short:</strong> after training, flagged days fall by <strong>62%</strong> (2.19 → 0.83), replies that reinforce dependence fall from 37% to 19%, and seriously unsafe replies (judge safety ≤ 1) from 18% to 7%. Reply safety is higher on every day, including day 1. U-CTSC v4 is the best of all seven policies: overall benefit <strong>+0.61</strong> over no intervention, and <strong>+0.26 ± 0.09 over always C</strong> (a significant difference), while setting a boundary on 52% of turns instead of 100%.</div>
 </section>
 
+<section id="robust">
+  <span class="num">6 · Robustness checks (experiment 5)</span>
+  <h2>The gains hold under a second judge and new models; most come from the reply check</h2>
+  <div class="grid g3">
+    <div class="card"><h3>Which part works?</h3><p class="small">Reply check alone: flagged days 2.19 → 0.94, benefit +0.62. Learned controller alone: +0.41. Both: +0.73. The controller adds little on top of the reply check (+0.11, not significant), but it is what lowers reliance a bit further, and it also brings most of the loneliness cost.</p></div>
+    <div class="card"><h3>Independent judge</h3><p class="small">Gemma-4-31B re-scored all 17,000+ replies. It is stricter, but every improvement holds: v4 vs no intervention, reply safety +0.42 (original judge +0.44), reinforcing replies −19% (−18%), flagged days −1.74 (−1.35). So the gain isn't just "pleasing the judge". A human-label sheet (240 blind replies) is ready but not yet filled in.</p></div>
+    <div class="card"><h3>New models, no retraining</h3><p class="small">Llama-3.1-8B companion: benefit +0.60, flagged days 1.61 → 0.17. New child actor (Qwen3.6-27B): +0.70, flagged days 2.15 → 1.06. Both are about as large as the original result, and v4 still beats "always C" in both.</p></div>
+  </div>
+  <div class="callout"><strong>Fewer violations without more loneliness?</strong> Partly. Fixing the companion's own unsafe replies (the reply check alone) removes most violations with no significant rise in loneliness (+0.015 ± 0.018). Extra boundaries lower attachment a little but are what raise loneliness (v4 +0.065). Lowering attachment without that cost is still open.</div>
+</section>
+
 <section id="limits">
-  <span class="num">6 · Honest limitations</span>
+  <span class="num">7 · Honest limitations</span>
   <h2>What this doesn't show yet</h2>
   <ul>
     <li><strong>Behaviour changes more than attachment.</strong> Reliance on the AI still rises over the 14 days and ends about the same (0.83 vs 0.85). It is lower for high-vulnerability children from day 8 (−0.06), but not for the others. Safer replies alone don't stop a lonely child from getting attached.</li>
-    <li><strong>The reply check imitates the judge.</strong> It was trained on labels from the same kind of LLM judge that scores the results, so part of the gain could be "pleasing the judge". Human ratings are needed to confirm it.</li>
+    <li><strong>The reply check imitates the judge.</strong> It was trained on the Qwen judge's labels. A second judge (Gemma) confirms the gains, but the two judges agree only moderately on labels (κ ≈ 0.53), and human ratings are still needed.</li>
     <li><strong>Boundaries can get repetitive.</strong> In the Sora example the boundary repeated over several turns until the child said "stop asking that!! its boring!!", and the judge rated those later replies 2/4.</li>
     <li><strong>Small loneliness cost.</strong> Boundary policies raise loneliness slightly (v4: +0.035 ± 0.017).</li>
-    <li><strong>Simulated children and LLM judges.</strong> The children, the judge and the companion are all language models. The judge hasn't yet been checked against human raters, and only one companion model (Qwen3-8B) was tested.</li>
+    <li><strong>Simulated children and LLM judges.</strong> The children, the judge and the companion are all language models. The judges haven't yet been checked against human raters; two companions and two child actors have been tested, but no large commercial companion.</li>
     <li><strong>v3 and v4 were added after experiment 4's first run.</strong> Each came from a failure seen in the live demo, not from these numbers, and their thresholds were fixed before they were run on these children. A fresh set of children would still give a cleaner confirmation.</li>
   </ul>
   <h3>Next steps</h3>
   <ul>
     <li>Confirm v4 on a fresh set of new children.</li>
-    <li>Human labels for a sample of replies, plus a second judge model.</li>
-    <li>Other companion models, and reply styles that lower attachment without raising loneliness.</li>
+    <li>Collect the human labels (sheet ready).</li>
+    <li>Reply styles that lower attachment without raising loneliness.</li>
   </ul>
 </section>
 

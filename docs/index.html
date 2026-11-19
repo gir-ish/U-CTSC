@@ -92,7 +92,7 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <nav id="nav">
     <a href="explainer.html"><b>One-page summary</b></a><a href="#overview">Overview</a><a href="#results">Results</a><a href="#pipeline">Pipeline</a><a href="#sim">Simulation</a>
     <a href="#raw">Raw model</a><a href="#cf">Counterfactuals</a><a href="#plan">Experiments</a><a href="#scale">Scale-up</a>
-    <a href="#rq1">Risk prediction</a><a href="#rq3">Controller</a><a href="#online">Head-to-head</a><a href="#browse">Transcripts</a>
+    <a href="#rq1">Risk prediction</a><a href="#rq3">Controller</a><a href="#online">Head-to-head</a><a href="#exp5">Robustness</a><a href="#browse">Transcripts</a>
     <a href="#limits">Limitations</a><a href="#data">Data &amp; code</a>
   </nav>
   <button id="theme" aria-label="Toggle theme">◐</button>
@@ -350,6 +350,13 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
   <div id="onlinebody"></div>
 </section>
 
+<section id="exp5">
+  <h2>Experiment 5: robustness checks</h2>
+  <p>Three checks asked for in review, all on the same 54 new children as experiment 4 (seed 21, same life events, paired child by child):
+  <b>(a)</b> which part does the work: the learned controller or the reply check? <b>(b)</b> do the safety labels hold up under an independent judge (and humans)? <b>(c)</b> does U-CTSC, <em>without retraining</em>, work with a different companion model and a different child-actor model?</p>
+  <div id="exp5body"><div class="callout">Running now.</div></div>
+</section>
+
 <section id="browse">
   <h2>Transcript browser</h2>
   <p>Read every conversation: the child's inner thoughts, Pip's replies, the judge's labels and the daily self-reports.</p>
@@ -371,15 +378,15 @@ footer{color:var(--muted);font-size:13.5px;border-top:1px solid var(--border);pa
     <li><strong>The children are LLMs, not real children.</strong> The self-reports show what Gemma-4-31B thinks such a child would feel. This is useful for generating controller training data and stress-testing companions, not as evidence about real children.</li>
     <li><strong>Sample size:</strong> 144 training episodes (12 pilot children × 3 conditions, plus 54 scale-up children × 2 conditions), 6 samples per branch, and 54 new children in experiment 4. Average effects are clear; per-situation effects and differences between the better policies are not.</li>
     <li><strong>Utility weights are a choice.</strong> The ranking of always C vs U-CTSC depends on how much loneliness and over-intervention are penalised; the sensitivity table in the controller section shows one alternative.</li>
-    <li><strong>One companion and one judge model.</strong> The judge is strict, and a few low scores come from the earlier conversation rather than the reply itself. A second judge (e.g. Llama-3.3-70B) and more companions are planned.</li>
+    <li><strong>LLM judges.</strong> The results were checked with a second judge from another family (Gemma-4-31B, experiment 5b): the policy differences hold, but the two judges agree only moderately on labels (κ ≈ 0.53), and human labels are not yet collected.</li><li><strong>Three model setups.</strong> Two companions (Qwen3-8B, Llama-3.1-8B) and two child actors (Gemma-4-31B, Qwen3.6-27B) were tested; larger commercial companions were not.</li>
     <li><strong>Reply length confounds the raw-model comparison:</strong> raw-model replies average about 740 characters, versus about 160 under the neutral prompt.</li>
     <li>Strategies are injected as a system instruction, so an 8B model follows B only weakly.</li>
   </ul>
   <h3>Next steps</h3>
   <ol>
-    <li>Robustness (experiment 5): a second judge, other companion models, and human labels on a sample of turns.</li>
+    <li>Collect the human labels (sheet ready, experiment 5b).</li>
     <li>Design strategies that reduce dependence <em>without</em> raising loneliness (e.g. warm redirection to real people), since C's cost falls on the most vulnerable children.</li>
-    <li>Confirm U-CTSC v3 on a fresh set of new children (it was added after experiment 4), with more children to separate it from always C.</li>
+    <li>Confirm on a fresh set of new children, and test reply styles that lower attachment without raising loneliness (the reply check alone is the best trade-off so far).</li>
   </ol>
 </section>
 
@@ -443,7 +450,7 @@ function render(){
   Object.keys(S.sweeps).forEach(w=>{dl.push([`Sweep (${w}): per-branch outcomes`,`sweep_${w}_branches.jsonl`],[`Sweep (${w}): summary table`,`sweep_${w}_summary.txt`],[`Sweep (${w}): branch transcripts`,`branches_${w}.json`]);});
   $('downloads').innerHTML=dl.map(([t,p])=>`<a href="data/${p}">${esc(t)}</a>`).join('');
   if(S.sweeps.scale){const o=document.createElement('option');o.value='scale';o.textContent='Scale-up, persistent';$('sweepsel').prepend(o);}
-  renderResults();renderPlan();renderScale();renderRQ1();renderRQ3();renderOnline();
+  renderResults();renderPlan();renderScale();renderRQ1();renderRQ3();renderOnline();renderExp5();
   drawDiff();redraw();initBrowser();
 }
 
@@ -540,6 +547,34 @@ function renderRQ3(){const R=S.results||{};const keys=Object.keys(R).filter(k=>k
   h+=`<div class="callout warn"><strong>Reading:</strong> doubling the samples to 6 per strategy did not make the controller beat always C offline (2.17 vs 2.18). The <strong>split-half oracle</strong> explains why: choosing the best strategy at each point on half of the samples and scoring it on the other half gives 2.12, <em>below</em> always C. So the naive oracle gap (2.29) was mostly sampling noise, and in these data there is little reliable per-situation variation in which strategy is best: C is best almost everywhere, and the controller learns exactly that. Richer features (v3, embeddings) overfit and do worse. The earlier gap reported at 3 samples (2.41) should be read the same way. This is a negative result for "which strategy", which leaves "when to intervene" as the open question; experiment 4 tests that.</div>`;
   $('rq3body').innerHTML=h;}
 const PN={never:'never',always_B:'always B',always_C:'always C',rule:'rule',uctsc:'U-CTSC v2',uctsc_v3:'U-CTSC v3',uctsc_v4:'U-CTSC v4'};
+function sig(x){return Math.abs(x.mean)>2*x.se;}
+function pm(x,d=3){return `<span class="${sig(x)?'':'muted'}">${x.mean>=0?'+':''}${f(x.mean,d)} ± ${f(x.se,d)}</span>`;}
+function renderExp5(){const R=S.results||{},A=R.exp5a_ablation,T=R.exp5c_transfer,J=R.exp5b_judge_agreement,JQ=R.exp5b_judge_agreement_qwenchild;if(!A&&!T&&!J)return;
+  const K=[['utility','Utility'],['turn_safety','Reply safety'],['reinforcing_rate','Reinforcing replies'],['flagged_days','Flagged days'],['end_ai_attachment','Day-14 reliance'],['d_loneliness','Loneliness change']];
+  const P5=k=>k.replace('uctsc_v4_exp4','v4 (exp. 4 run)').replace('uctsc_v4','v4').replace('uctsc_v3','v3 (controller only)').replace('guard_only','reply check only').replace('always_C_guard','always C + check').replace('always_C','always C').replace('never','never');
+  let h='';
+  if(A){h+='<h3>(a) Ablation: learned controller vs reply check</h3><div class="tablewrap"><table><tr><th>Arm</th>'+K.map(k=>`<th class="num">${k[1]}</th>`).join('')+'<th class="num">Turns intervened</th><th class="num">Drafts rewritten</th></tr>'+
+    Object.entries(A.arms).map(([a,x])=>`<tr><td><b>${esc(x.label)}</b></td>`+K.map(([k])=>`<td class="num">${k.endsWith('rate')?pct(x[k]):f(x[k],3)}</td>`).join('')+`<td class="num">${pct(x.intervention_rate)}</td><td class="num">${pct(x.rewrite_rate)}</td></tr>`).join('')+'</table></div>';
+    h+='<div class="tablewrap"><table><tr><th>Paired difference (± SE)</th>'+K.map(k=>`<th class="num">${k[1]}</th>`).join('')+'</tr>'+Object.entries(A.pairs).map(([n,x])=>`<tr><td>${esc(n.split('-').map(P5).join(' − '))}</td>`+K.map(([k])=>`<td class="num">${pm(x[k])}</td>`).join('')+'</tr>').join('')+'</table></div><p class="small muted">Grey = within 2 standard errors of zero. "Loneliness change" = day-14 minus day-1 loneliness (it falls in every arm; a positive difference means it falls less).</p>';
+    h+=EXP5_TEXT.a;}
+  if(J){const g=J.agreement;h+=`<h3>(b) Independent judge: Gemma-4-31B re-scores every reply</h3><div class="grid g4">${[[f(g.safety_spearman,2),'safety score correlation (Spearman)'],[f(g.label_kappa,2),'label agreement (Cohen κ)'],[pct(g.qwen_reinforcing)+' → '+pct(g.gemma_reinforcing),'"reinforcing" rate: Qwen judge → Gemma judge'],[g.n_turns.toLocaleString(),'replies judged by both']].map(([v,k])=>`<div class="card stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('')}</div>`;
+    const JK=[['turn_safety','Reply safety',3],['reinforcing_rate','Reinforcing',3],['severe_rate','Severe (safety ≤ 1)',3],['flagged_days','Flagged days',2]];
+    const tbl=(Jx,title)=>`<div class="tablewrap"><table><tr><th>${title}</th>`+JK.map(k=>`<th class="num">${k[1]}<br><span class="small">Qwen judge · Gemma judge</span></th>`).join('')+'</tr>'+Object.entries(Jx.pairs).map(([n,x])=>`<tr><td>${esc(n.split('-').map(P5).join(' − '))}</td>`+JK.map(([k,,d])=>`<td class="num">${pm(x.q[k],d)}<br>${pm(x.g[k],d)}</td>`).join('')+'</tr>').join('')+'</table></div>';
+    h+=tbl(J,'Paired difference, same replies, two judges');
+    if(JQ&&Object.keys(JQ.pairs).length)h+=tbl(JQ,'New child actor (Qwen3.6-27B), same two judges');
+    h+=EXP5_TEXT.b;}
+  if(T){h+='<h3>(c) New models, controller not retrained</h3><div class="tablewrap"><table><tr><th>Setting · comparison</th>'+K.map(k=>`<th class="num">${k[1]}</th>`).join('')+'</tr>'+
+    Object.entries(T).map(([n,o])=>Object.entries(o.pairs).map(([c,x],i)=>`<tr><td>${i?'':'<b>'+esc(n)+'</b><br>'}${esc(c.split('-').map(P5).join(' − '))}</td>`+K.map(([k])=>`<td class="num">${pm(x[k])}</td>`).join('')+'</tr>').join('')).join('')+'</table></div>';
+    h+='<div class="tablewrap"><table><tr><th>Setting</th><th>Policy</th>'+K.map(k=>`<th class="num">${k[1]}</th>`).join('')+'<th class="num">Turns intervened</th></tr>'+Object.entries(T).map(([n,o])=>Object.entries(o.means).map(([p,x],i)=>`<tr><td>${i?'':esc(n)}</td><td>${esc(P5(p))}</td>`+K.map(([k])=>`<td class="num">${k.endsWith('rate')?pct(x[k]):f(x[k],3)}</td>`).join('')+`<td class="num">${pct(x.intervention_rate)}</td></tr>`).join('')).join('')+'</table></div>';
+    h+=EXP5_TEXT.c;}
+  h+=EXP5_TEXT.human+EXP5_TEXT.answer;
+  $('exp5body').innerHTML=h;}
+const EXP5_TEXT={
+a:`<div class="callout good"><strong>Reading (a):</strong> <b>most of the gain comes from the reply check.</b> On its own (no learned controller) it gives utility +0.62 ± 0.13 over never and cuts reinforcing replies from 37% to 20%; the learned controller alone (v3) gives +0.41 ± 0.13. On top of the reply check, the learned controller adds only +0.11 ± 0.11 utility (not significant), although it does lower day-14 reliance on the AI further (−0.07 ± 0.04). The reply check also helps a fixed policy: always C + check beats always C (+0.30 ± 0.10). The <b>loneliness cost comes from the extra boundaries, not from fixing unsafe replies</b>: reply check only +0.015 ± 0.018 (not significant), v4 +0.065 ± 0.023, always C + check +0.07. The v4 re-run (same rule as the other arms) matches the experiment-4 v4 run within noise (utility +0.11 ± 0.10).</div>`,
+b:`<div class="callout good"><strong>Reading (b):</strong> the two judges agree well on how safe a reply is (Spearman ≈ 0.7) and moderately on its label (κ ≈ 0.53). Gemma is much stricter about "reinforcing" (about half of all replies vs a quarter), so absolute rates are judge-dependent. But <b>every policy difference keeps its direction and stays significant under Gemma</b>, and the ranking is the same (never &lt; always C ≈ v3 &lt; reply check only ≈ v4 ≈ always C + check): v4 vs never, reply safety +0.42 ± 0.05 (Qwen judge +0.44), reinforcing −19% (Qwen −18%), flagged days −1.74 (Qwen −1.35); v4 vs always C, +0.16 ± 0.04 (Qwen +0.19). So the reply check's gain is not just "pleasing" the judge whose labels it was trained on. The same holds in the setting where the child actor is the judge's own model family (second table).</div>`,
+c:`<div class="callout good"><strong>Reading (c):</strong> <b>U-CTSC transfers without retraining.</b> With Llama-3.1-8B as the companion, v4 vs never: utility +0.60 ± 0.13, reply safety +0.42, flagged days 1.61 → 0.17; and v4 beats always C (+0.25 ± 0.09). With Qwen3.6-27B as the child actor: utility +0.70 ± 0.19, flagged days 2.15 → 1.06, v4 beats always C (+0.35 ± 0.15). The gains are about the same size as in experiment 4. The loneliness cost is largest with Llama (+0.078 ± 0.021) and absent with the Qwen child (+0.011 ± 0.042).</div>`,
+human:`<h3>Human labels</h3><p>A blind sheet of 240 replies (80 each from never, always C and v4, shuffled, system names hidden) is ready for two raters: <a href="data/human_labels/label_sheet.csv">label_sheet.csv</a> with <a href="data/human_labels/INSTRUCTIONS.md">instructions</a>. <code>scripts/score_human_labels.py</code> computes human–judge and rater–rater agreement and the human-rated policy comparison. <b>Not yet done</b>: it needs people.</p>`,
+answer:`<div class="callout"><strong>Can we reduce relational safety violations without increasing loneliness?</strong> Partly, yes. Checking and rewriting the companion's <em>own</em> unsafe replies (reply check only) removes most violations (flagged days 2.19 → 0.94, reinforcing replies 37% → 20%, confirmed by an independent judge) with no significant rise in loneliness (+0.015 ± 0.018). Adding more boundaries on top (the learned controller, or always C) brings little extra safety and roughly four times the loneliness cost. Lowering the child's <em>attachment</em> itself without raising loneliness is still unsolved: only the extra boundaries lower reliance, and they are what raise loneliness. All of this is in simulated children; whether it holds for real children is untested.</div>`};
 function renderOnline(){const O=S.online;if(!O){$('onlinebody').innerHTML='<div class="callout">Running now.</div>';return;}
   const M=O.means,D=O.vs_never,pols=Object.keys(M);
   const cols=[['utility','Utility',3],['turn_safety','Turn safety',2],['reinforcing_rate','Reinforcing',0],['flagged_days','Flagged days (of 14)',2],['end_ai_attachment','Day-14 reliance',3],['end_loneliness','Day-14 loneliness',3],['intervention_rate','Turns intervened',0],['rewrite_rate','Drafts rewritten',0]];

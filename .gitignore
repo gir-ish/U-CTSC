@@ -9,3 +9,4 @@ project-team2.pdf
 review/
 *.pkl
 .cache/
+results/human_label_key.csv  # blind-label key: keep out of the public repo until rating is done
